@@ -1,0 +1,27 @@
+"use strict";
+Object.defineProperty(exports, "__esModule", { value: true });
+exports.verifyAuth = void 0;
+const jwt_utils_1 = require("../utils/jwt.utils");
+const verifyAuth = (req, res, next) => {
+    try {
+        // 1. Token nikalna (Header aam taur par "Bearer <token>" format mein hota hai)
+        const authHeader = req.headers.authorization;
+        if (!authHeader || !authHeader.startsWith('Bearer ')) {
+            return res.status(401).json({ message: "Access Denied. No token provided." });
+        }
+        const token = authHeader.split(' ')[1];
+        // 2. Token Verify karna (Jo utils humne pehle banaye the)
+        // 'as any' ya apna custom interface lagao
+        const decodedUser = (0, jwt_utils_1.verifyToken)(token);
+        req.user = decodedUser;
+        // 3. User ka data request mein daal do taaki aage controllers use kar sakein
+        req.user = decodedUser;
+        // 4. Sab sahi hai, aage badho (Controller ke paas jao)
+        next();
+    }
+    catch (error) {
+        // Agar token expire ho gaya hai ya galat hai
+        return res.status(401).json({ message: "Invalid or Expired Token." });
+    }
+};
+exports.verifyAuth = verifyAuth;
