@@ -2,11 +2,14 @@ import express from 'express';
 import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import authRoutes from './routes/auth.routes';
+import cors from 'cors';
+import { corsConfig } from './config/cors.config';
 
 
 export function startServer(){
   
   const app = express();
+  app.use(cors(corsConfig));
   dotenv.config();  
   app.use(cookieParser()); // Cookie parser middleware for handling cookies
 

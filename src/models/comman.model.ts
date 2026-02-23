@@ -1,5 +1,5 @@
 export interface UserRequest {
-    full_name : string,
+    fullName : string,
     email : string,
     password : string,
     avatar_url?: string

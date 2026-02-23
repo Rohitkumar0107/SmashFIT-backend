@@ -115,77 +115,98 @@ export class authService {
         return newTokens;
     }
 
-async googleLogin(googleData: { idToken: string, accessToken?: string, refreshToken?: string, expiresIn?: number }) {
-    const repository = new authRepository();
+    async googleLogin(googleData: { idToken: string, accessToken?: string, refreshToken?: string, expiresIn?: number }) {
+        const repository = new authRepository();
 
-    // 1. Google Token Verify Karo (Identity check)
-    const ticket = await googleClient.verifyIdToken({
-        idToken: googleData.idToken,
-        audience: process.env.GOOGLE_CLIENT_ID,
-    });
+        // 1. Google Token Verify Karo (Identity check)
+        const ticket = await googleClient.verifyIdToken({
+            idToken: googleData.idToken,
+            audience: process.env.GOOGLE_CLIENT_ID,
+        });
 
-    const payload = ticket.getPayload();
+        const payload = ticket.getPayload();
 
-    // Safety check: Essential fields missing nahi honi chahiye
-    if (!payload || !payload.email || !payload.sub) {
-        throw new Error('Invalid Google Token: Missing essential payload data');
-    }
+        // Safety check
+        if (!payload || !payload.email || !payload.sub) {
+            throw new Error('Invalid Google Token: Missing essential payload data');
+        }
 
-    const { email, name, picture, sub } = payload;
+        const { 
+            sub: googleId, 
+            email, 
+            name: full_name, 
+            picture 
+        } = payload;
 
-    // 2. Check karo DB mein user pehle se hai ya nahi
-    let user = await repository.findUserByEmail(email);
+        if (!email) throw new Error("Email not found in Google account");
 
-    // 3. Agar naya user hai, toh DB mein entry banao
-    if (!user) {
-        // Secure random password generate karo (DB NOT NULL constraint ke liye)
-        const randomPassword = crypto.randomBytes(16).toString('hex');
-        const salt = await bcrypt.genSalt(10);
-        const hashedPassword = await bcrypt.hash(randomPassword, salt);
+        // 2. Check karo DB mein user pehle se hai ya nahi
+        let user = await repository.findUserByEmail(email);
 
-        const newUserData = {
-            full_name: name || 'Google User',
-            email: email,
-            password: hashedPassword,
-            avatar_url: picture || null // Google profile pic
+        // --- YAHAN LAGANA HAI YE LOGIC ---
+        if (user) {
+            // Agar existing user ki photo null hai ya badal gayi hai, toh update karo
+            if (!user.avatar_url && picture) {
+                // Ensure repository mein 'updateUserAvatar' function bana hua hai
+                user = await repository.updateUserAvatar(user.id, picture);
+            }
+        } else {
+            // 3. Agar naya user hai, toh DB mein entry banao (PEHLE WALA LOGIC)
+            const randomPassword = crypto.randomBytes(16).toString('hex');
+            const salt = await bcrypt.genSalt(10);
+            const hashedPassword = await bcrypt.hash(randomPassword, salt);
+
+            const newUserData = {
+                fullName: full_name || 'Google User',
+                email: email,
+                password: hashedPassword,
+                avatar_url: picture || null
+            };
+
+            user = await repository.registerUser(newUserData);
+        }
+        // ---------------------------------
+
+        // 4. Time Conversion
+        let finalExpiresAt = null;
+        if (googleData.expiresIn) {
+            finalExpiresAt = new Date(Date.now() + (googleData.expiresIn * 1000));
+        }
+
+        // 5. Accounts Table mein entry daalo
+        await repository.linkProviderAccount({
+            user_id: user.id,
+            provider: 'google',
+            provider_account_id: googleId,
+            access_token: googleData.accessToken || null,
+            refresh_token: googleData.refreshToken || null,
+            expires_at: finalExpiresAt
+        });
+
+        // 6. Custom JWT Tokens Generate Karo
+        const tokens = generateTokens({ id: user.id, email: user.email });
+
+        // 7. Refresh token save karo
+        const sessionExpiresAt = new Date();
+        sessionExpiresAt.setDate(sessionExpiresAt.getDate() + 7);
+        await repository.saveRefreshToken(user.id, tokens.refreshToken, sessionExpiresAt);
+
+        // 8. Security: Response mapping
+        return {
+            user: {
+                id: user.id,
+                full_name: user.fullName || user.full_name, 
+                email: user.email,
+                picture: user.avatar_url, // 'avatar_url' ko 'picture' naam se bhej rahe hain
+            },
+            ...tokens
         };
-
-        user = await repository.registerUser(newUserData);
     }
 
-    // 4. Time Conversion: Google's relative 'expiresIn' (seconds) -> Absolute Date
-    let finalExpiresAt = null;
-    if (googleData.expiresIn) {
-        // Current time + seconds to milliseconds
-        finalExpiresAt = new Date(Date.now() + (googleData.expiresIn * 1000));
+    // auth.service.ts mein add karo
+    async getUserProfile(userId: string) {
+        const repository = new authRepository();
+        return await repository.findUserById(userId);
     }
-
-    // 5. Accounts Table mein entry daalo (Linking Google to User)
-    // Isse tum user ke Google features (Calendar etc.) baad mein access kar paoge
-    await repository.linkProviderAccount({
-        user_id: user.id,
-        provider: 'google',
-        provider_account_id: sub, // Google's unique ID
-        access_token: googleData.accessToken || null,
-        refresh_token: googleData.refreshToken || null,
-        expires_at: finalExpiresAt
-    });
-
-    // 6. Custom JWT Tokens Generate Karo (Tumhare App ke session ke liye)
-    const tokens = generateTokens({ id: user.id, email: user.email });
-
-    // 7. Refresh token ko session table (sm.refresh_tokens) mein save karo
-    const sessionExpiresAt = new Date();
-    sessionExpiresAt.setDate(sessionExpiresAt.getDate() + 7); // 7 din ka session
-    await repository.saveRefreshToken(user.id, tokens.refreshToken, sessionExpiresAt);
-
-    // 8. Security: Password hata kar user details aur tokens bhej do
-    const { password, ...userWithoutPassword } = user;
-
-    return {
-        user: userWithoutPassword,
-        ...tokens
-    };
-}
 
 }

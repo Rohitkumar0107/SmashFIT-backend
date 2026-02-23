@@ -15,6 +15,12 @@ export class authRepository {
         return result.rows[0]; 
     }
 
+    async updateUserAvatar(userId: string, avatarUrl: string) {
+        const query = 'UPDATE sm.users SET avatar_url = $1 WHERE id = $2 RETURNING id, full_name, email, avatar_url';
+        const result = await pool.query(query, [avatarUrl, userId]);
+        return result.rows[0];
+    }
+
     // Register ke liye (Jo pehle banaya tha)
     async registerUser(userData: UserRequest) {
         const query = `
@@ -23,7 +29,7 @@ export class authRepository {
             RETURNING id, full_name, email, avatar_url, created_at;
         `;
         const values = [
-            userData.full_name, 
+            userData.fullName, 
             userData.email, 
             userData.password, 
             userData.avatar_url || null
@@ -60,7 +66,7 @@ export class authRepository {
 
     // 2. Naya token banane ke liye user ki details chahiye hongi
     async findUserById(id: string) {
-        const query = 'SELECT id, email FROM sm.users WHERE id = $1';
+        const query = 'SELECT * FROM sm.users WHERE id = $1';
         const result = await pool.query(query, [id]);
         return result.rows[0];
     }

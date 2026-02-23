@@ -3,7 +3,7 @@ import { authService } from '../services/auth.service';
 import { UserRequest } from '../models/comman.model';
 import { AuthenticatedRequest } from '../types/AuthenticatedRequest';
 
-const register = async(req: AuthenticatedRequest,res: Response)=>{
+const register = async(req: AuthenticatedRequest,res: Response) =>{
     try{
         const userData: UserRequest  = req.body;
 
@@ -15,7 +15,6 @@ const register = async(req: AuthenticatedRequest,res: Response)=>{
         
         return res.status(201).json({
             success: true,
-            data: result,
             message: "User registered successfully"
         });
 
@@ -51,7 +50,6 @@ const login = async (req: AuthenticatedRequest, res: Response) => {
             success: true,
             accessToken: result.accessToken,
             refreshToken: result.refreshToken,
-            user: result.user
         });
 
     } catch (error: any) {
@@ -155,7 +153,6 @@ export const googleAuth = async (req: AuthenticatedRequest, res: Response) => {
         return res.status(200).json({
             success: true,
             accessToken: result.accessToken,
-            user: result.user
         });
 
     } catch (error: any) {
@@ -164,10 +161,45 @@ export const googleAuth = async (req: AuthenticatedRequest, res: Response) => {
     }
 };
 
+// src/controllers/auth.controller.ts
+
+export const getProfile = async (req: AuthenticatedRequest, res: Response) => {
+    try {
+        // Middleware ne req.user set kar diya hai
+        const userId = req.user?.id; 
+
+        if (!userId) {
+            return res.status(400).json({ success: false, message: "User ID not found in token" });
+        }
+
+        const service = new authService();
+        const user = await service.getUserProfile(userId);
+
+        if (!user) {
+            return res.status(404).json({ success: false, message: "User not found" });
+        }
+
+        return res.status(200).json({
+            success: true,
+            user: {
+                id: user.id,
+                full_name: user.fullName || user.full_name,
+                email: user.email,
+                picture: user.avatar_url || user.picture,
+                role: user.role
+            }
+        });
+    } catch (error) {
+        console.error("Get Profile Error:", error);
+        return res.status(500).json({ success: false, message: "Internal Server Error" });
+    }
+};
+
 export default {
     register,
     login,
     logout,
     refreshToken,
-    googleAuth
+    googleAuth,
+    getProfile
 }
