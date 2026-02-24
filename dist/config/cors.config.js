@@ -7,11 +7,12 @@ const allowedOrigins = [
     'http://localhost:5173', // Tera React Vite app
     'https://smash-fit-frontend.vercel.app',
     'https://smash-fit-frontend-4f6ce0qlu.vercel.app',
-    'https://smash-fit-frontend-git-main-rohitkumar964930-gmailcoms-projects.vercel.app/'
+    'https://smash-fit-frontend-git-main-rohitkumar964930-gmailcoms-projects.vercel.app'
 ];
 exports.corsConfig = {
     origin: (origin, callback) => {
         // Agar request server-to-server hai (origin undefined) ya allowed list mein hai, toh pass hone do
+        console.log("🚀 Request from Origin:", origin);
         if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
         }
