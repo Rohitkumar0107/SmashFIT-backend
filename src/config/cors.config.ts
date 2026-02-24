@@ -5,7 +5,7 @@ import { CorsOptions } from 'cors';
 // Abhi ke liye Vite ka local address daala hai
 const allowedOrigins = [
     'http://localhost:5173', // Tera React Vite app
-    // 'https://smashit.com', // Future production URL yahan aayega
+    'https://smash-fit-frontend.vercel.app', // Future production URL yahan aayega
 ];
 
 export const corsConfig: CorsOptions = {
