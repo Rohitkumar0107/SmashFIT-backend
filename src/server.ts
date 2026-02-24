@@ -3,6 +3,7 @@ import dotenv from 'dotenv';
 import cookieParser from 'cookie-parser';
 import authRoutes from './routes/auth.routes';
 import cors from 'cors';
+import path from 'path';
 import { corsConfig } from './config/cors.config';
 
 
@@ -10,7 +11,7 @@ export function startServer(){
   
   const app = express();
   app.use(cors(corsConfig));
-  dotenv.config();  
+  dotenv.config({ path: path.join(__dirname, '../.env') }); 
   app.use(cookieParser()); // Cookie parser middleware for handling cookies
 
   app.use(express.json());

@@ -9,11 +9,12 @@ const dotenv_1 = __importDefault(require("dotenv"));
 const cookie_parser_1 = __importDefault(require("cookie-parser"));
 const auth_routes_1 = __importDefault(require("./routes/auth.routes"));
 const cors_1 = __importDefault(require("cors"));
+const path_1 = __importDefault(require("path"));
 const cors_config_1 = require("./config/cors.config");
 function startServer() {
     const app = (0, express_1.default)();
     app.use((0, cors_1.default)(cors_config_1.corsConfig));
-    dotenv_1.default.config();
+    dotenv_1.default.config({ path: path_1.default.join(__dirname, '../.env') });
     app.use((0, cookie_parser_1.default)()); // Cookie parser middleware for handling cookies
     app.use(express_1.default.json());
     // for auth routes
