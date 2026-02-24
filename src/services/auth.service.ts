@@ -115,12 +115,12 @@ export class authService {
         return newTokens;
     }
 
-    async googleLogin(googleData: { id_token: string, access_token?: string, refresh_token?: string, expires_in?: number }) {
+    async googleLogin(googleData: { idToken: string, accessToken?: string, refreshToken?: string, expiresIn?: number }) {
         const repository = new authRepository();
 
         // 1. Google Token Verify Karo (Identity check)
         const ticket = await googleClient.verifyIdToken({
-            idToken: googleData.id_token,
+            idToken: googleData.idToken,
             audience: process.env.GOOGLE_CLIENT_ID,
         });
 
@@ -169,8 +169,8 @@ export class authService {
 
         // 4. Time Conversion
         let finalExpiresAt = null;
-        if (googleData.expires_in) {
-            finalExpiresAt = new Date(Date.now() + (googleData.expires_in * 1000));
+        if (googleData.expiresIn) {
+            finalExpiresAt = new Date(Date.now() + (googleData.expiresIn * 1000));
         }
 
         // 5. Accounts Table mein entry daalo
@@ -178,8 +178,8 @@ export class authService {
             user_id: user.id,
             provider: 'google',
             provider_account_id: googleId,
-            access_token: googleData.access_token || null,
-            refresh_token: googleData.refresh_token  || null,
+            access_token: googleData.accessToken || null,
+            refresh_token: googleData.refreshToken || null,
             expires_at: finalExpiresAt
         });
 

@@ -127,19 +127,19 @@ export const refreshToken = async (req: AuthenticatedRequest, res: Response) => 
 export const googleAuth = async (req: AuthenticatedRequest, res: Response) => {
     try {
         // Frontend body mein idToken bhejega
-        const { id_token, access_token, refresh_token, expires_in } = req.body; 
+        const { idToken, accessToken, refreshToken, expiresIn } = req.body; 
 
-        if (!id_token) {
+        if (!idToken) {
             return res.status(400).json({ success: false, message: 'Google Token is required' });
         }
 
         const service = new authService();
         // Pura data service ko pass kar do
         const result = await service.googleLogin({ 
-            id_token, 
-            access_token, 
-            refresh_token, 
-            expires_in
+            idToken, 
+            accessToken, 
+            refreshToken, 
+            expiresIn
         });
 
         // Refresh Token Cookie mein set karo
