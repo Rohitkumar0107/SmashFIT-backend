@@ -50,7 +50,12 @@ export class authService {
         if (!isPasswordMatch) throw new Error('Invalid email or password');
 
         // 2. Tokens generate karo
-        const tokens = generateTokens({ id: user.id, email: user.email });
+        // Tokens generate karte waqt:
+    const tokens = generateTokens({ 
+        id: user.id, 
+        email: user.email, 
+        role_name: user.role_name // Ye DB join se aayega
+    });
 
         // 3. DATABASE MEIN INSERT KARO (Naya step)
         // Expiry date calculate karo (e.g., 7 days aage ki date)
@@ -102,7 +107,7 @@ export class authService {
         }
 
         // 4. Naye tokens generate karo
-        const newTokens = generateTokens({ id: user.id, email: user.email });
+        const newTokens = generateTokens({ id: user.id, email: user.email, role_name: user.role_name });
 
         // 5. Token Rotation: Purana token DB se delete karo, aur naya insert karo
         await repository.deleteRefreshToken(incomingRefreshToken);
@@ -116,6 +121,7 @@ export class authService {
     }
 
     async googleLogin(googleData: { idToken: string, accessToken?: string, refreshToken?: string, expiresIn?: number }) {
+        // console.log("start of service");
         const repository = new authRepository();
 
         // 1. Google Token Verify Karo (Identity check)
@@ -184,13 +190,14 @@ export class authService {
         });
 
         // 6. Custom JWT Tokens Generate Karo
-        const tokens = generateTokens({ id: user.id, email: user.email });
+        const tokens = generateTokens({ id: user.id, email: user.email, role_name: user.role_name });
 
         // 7. Refresh token save karo
         const sessionExpiresAt = new Date();
         sessionExpiresAt.setDate(sessionExpiresAt.getDate() + 7);
         await repository.saveRefreshToken(user.id, tokens.refreshToken, sessionExpiresAt);
 
+        // console.log("end of service");
         // 8. Security: Response mapping
         return {
             user: {

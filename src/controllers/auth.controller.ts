@@ -126,6 +126,7 @@ export const refreshToken = async (req: AuthenticatedRequest, res: Response) => 
 
 export const googleAuth = async (req: AuthenticatedRequest, res: Response) => {
     try {
+        // console.log("start of controller");
         // Frontend body mein idToken bhejega
         const { idToken, accessToken, refreshToken, expiresIn } = req.body; 
 
@@ -149,6 +150,7 @@ export const googleAuth = async (req: AuthenticatedRequest, res: Response) => {
             sameSite: 'strict',
             maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
+        // console.log("end of controller");
 
         return res.status(200).json({
             success: true,
@@ -179,6 +181,8 @@ export const getProfile = async (req: AuthenticatedRequest, res: Response) => {
             return res.status(404).json({ success: false, message: "User not found" });
         }
 
+        // console.log("User Profile:", user); // Debugging log
+
         return res.status(200).json({
             success: true,
             user: {
@@ -186,7 +190,7 @@ export const getProfile = async (req: AuthenticatedRequest, res: Response) => {
                 full_name: user.fullName || user.full_name,
                 email: user.email,
                 picture: user.avatar_url || user.picture,
-                role: user.role
+                role: user.role_name || user.role // DB join se aayega
             }
         });
     } catch (error) {

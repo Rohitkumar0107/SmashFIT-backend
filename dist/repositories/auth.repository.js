@@ -16,13 +16,16 @@ exports.authRepository = void 0;
 const db_1 = __importDefault(require("../config/db")); // Tumhara DB connection pool
 class authRepository {
     // Login ke liye: User ko email se dhoondhna
+    // 1. Find User by Email (JOIN ke sath)
     findUserByEmail(email) {
         return __awaiter(this, void 0, void 0, function* () {
-            // 'sm' schema specify karna mat bhulna
-            // password select karna zaroori hai bcrypt check ke liye
-            const query = 'SELECT id, full_name, email, password FROM sm.users WHERE email = $1';
+            const query = `
+            SELECT u.*, r.role_name 
+            FROM sm.users u 
+            LEFT JOIN sm.roles r ON u.role_id = r.id 
+            WHERE u.email = $1
+        `;
             const result = yield db_1.default.query(query, [email]);
-            // Agar user mila toh object return karega, warna undefined
             return result.rows[0];
         });
     }
@@ -37,16 +40,16 @@ class authRepository {
     registerUser(userData) {
         return __awaiter(this, void 0, void 0, function* () {
             const query = `
-            INSERT INTO sm.users (full_name, email, password, avatar_url) 
-            VALUES ($1, $2, $3, $4) 
-            RETURNING id, full_name, email, avatar_url, created_at;
+            WITH inserted AS (
+                INSERT INTO sm.users (full_name, email, password, avatar_url) 
+                VALUES ($1, $2, $3, $4) 
+                RETURNING *
+            )
+            SELECT i.*, r.role_name 
+            FROM inserted i
+            LEFT JOIN sm.roles r ON i.role_id = r.id
         `;
-            const values = [
-                userData.fullName,
-                userData.email,
-                userData.password,
-                userData.avatar_url || null
-            ];
+            const values = [userData.fullName, userData.email, userData.password, userData.avatar_url || null];
             const result = yield db_1.default.query(query, values);
             return result.rows[0];
         });
@@ -56,6 +59,8 @@ class authRepository {
             const query = `
             INSERT INTO sm.refresh_tokens (user_id, token, expires_at) 
             VALUES ($1, $2, $3) 
+            ON CONFLICT (token) 
+            DO UPDATE SET token = EXCLUDED.token, expires_at = EXCLUDED.expires_at
             RETURNING id, token;
         `;
             const values = [userId, token, expiresAt];
@@ -79,9 +84,15 @@ class authRepository {
         });
     }
     // 2. Naya token banane ke liye user ki details chahiye hongi
+    // 2. Find User by ID (JOIN ke sath)
     findUserById(id) {
         return __awaiter(this, void 0, void 0, function* () {
-            const query = 'SELECT * FROM sm.users WHERE id = $1';
+            const query = `
+            SELECT u.*, r.role_name 
+            FROM sm.users u 
+            LEFT JOIN sm.roles r ON u.role_id = r.id 
+            WHERE u.id = $1
+        `;
             const result = yield db_1.default.query(query, [id]);
             return result.rows[0];
         });

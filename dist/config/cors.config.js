@@ -12,7 +12,7 @@ const allowedOrigins = [
 exports.corsConfig = {
     origin: (origin, callback) => {
         // Agar request server-to-server hai (origin undefined) ya allowed list mein hai, toh pass hone do
-        console.log("🚀 Request from Origin:", origin);
+        // console.log("🚀 Request from Origin:", origin);
         if (!origin || allowedOrigins.includes(origin)) {
             callback(null, true);
         }

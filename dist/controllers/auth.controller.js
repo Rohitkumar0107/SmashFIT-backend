@@ -121,6 +121,7 @@ const refreshToken = (req, res) => __awaiter(void 0, void 0, void 0, function* (
 exports.refreshToken = refreshToken;
 const googleAuth = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
+        // console.log("start of controller");
         // Frontend body mein idToken bhejega
         const { idToken, accessToken, refreshToken, expiresIn } = req.body;
         if (!idToken) {
@@ -141,6 +142,7 @@ const googleAuth = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
             sameSite: 'strict',
             maxAge: 7 * 24 * 60 * 60 * 1000 // 7 days
         });
+        // console.log("end of controller");
         return res.status(200).json({
             success: true,
             accessToken: result.accessToken,
@@ -166,6 +168,7 @@ const getProfile = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
         if (!user) {
             return res.status(404).json({ success: false, message: "User not found" });
         }
+        // console.log("User Profile:", user); // Debugging log
         return res.status(200).json({
             success: true,
             user: {
@@ -173,7 +176,7 @@ const getProfile = (req, res) => __awaiter(void 0, void 0, void 0, function* () 
                 full_name: user.fullName || user.full_name,
                 email: user.email,
                 picture: user.avatar_url || user.picture,
-                role: user.role
+                role: user.role_name || user.role // DB join se aayega
             }
         });
     }

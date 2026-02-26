@@ -30,3 +30,28 @@ export const verifyAuth = (req: AuthenticatedRequest, res: Response, next: NextF
         return res.status(401).json({ message: "Invalid or Expired Token." });
     }
 };
+
+// 2. NAYA: requireRole (Authorization)
+export const requireRole = (allowedRoles: string[]) => {
+    return (req: AuthenticatedRequest, res: Response, next: NextFunction) => {
+        
+        // Middleware check: Kya user authenticated hai?
+        if (!req.user) {
+            return res.status(401).json({ success: false, message: "Bhai, pehle login toh kar lo!" });
+        }
+
+        // Token se 'role' nikalna (Payload mein humne 'role' key use ki thi)
+        const userRole = req.user.role_name; 
+
+        // Check karo ki user ka role allowed list mein hai ya nahi
+        if (!allowedRoles.includes(userRole)) {
+            return res.status(403).json({ 
+                success: false, 
+                message: `Denied! Ye sirf ${allowedRoles.join(' or ')} ke liye hai.` 
+            });
+        }
+
+        // Sab sahi hai, aage badho
+        next();
+    };
+};

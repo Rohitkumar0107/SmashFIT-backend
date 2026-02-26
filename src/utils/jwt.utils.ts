@@ -1,20 +1,42 @@
 import jwt from 'jsonwebtoken';
 
-// Inhe .env file se uthana best hai
-const ACCESS_SECRET = process.env.ACCESS_TOKEN_SECRET || 'super_secret_access';
-const REFRESH_SECRET = process.env.REFRESH_TOKEN_SECRET || 'super_secret_refresh';
+// 1. Secrets ko variables mein store karo (Default values ke saath taaki code phate nahi)
+const ACCESS_SECRET = process.env.ACCESS_TOKEN_SECRET || 'smashfit_dev_access_key_123';
+const REFRESH_SECRET = process.env.REFRESH_TOKEN_SECRET || 'smashfit_dev_refresh_key_456';
 
-export const generateTokens = (payload: { id: string | number, email: string }) => {
-    
-    const accessToken = jwt.sign(payload, ACCESS_SECRET, {
-        expiresIn: '15m',
-    });
+// 2. Payload ka interface banao taaki TypeScript khush rahe
+interface TokenPayload {
+    id: string | number;
+    email: string;
+    role_name: string;
+}
 
-    const refreshToken = jwt.sign({ id: payload.id }, REFRESH_SECRET, {
-        expiresIn: '7d',
-    });
+export const generateTokens = (payload: TokenPayload) => {
+    try {
+        // 3. Access Token: Ismein user ki identity aur role hai
+        const accessToken = jwt.sign(
+            { 
+                id: payload.id, 
+                email: payload.email, 
+                role: payload.role_name // Frontend ke liye 'role' key
+            }, 
+            ACCESS_SECRET, // Upar wala variable use kiya
+            { expiresIn: '15m' }
+        );
 
-    return { accessToken, refreshToken };
+        // 4. Refresh Token: Ismein sirf ID hai (Security best practice)
+        const refreshToken = jwt.sign(
+            { id: payload.id }, 
+            REFRESH_SECRET, // Upar wala variable use kiya
+            { expiresIn: '7d' }
+        );
+
+        return { accessToken, refreshToken };
+
+    } catch (error) {
+        console.error("Token Generation Error:", error);
+        throw new Error("Failed to generate authentication tokens");
+    }
 };
 
 export const verifyToken = (token: string, isRefresh = false) => {

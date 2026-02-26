@@ -3,4 +3,5 @@ export interface LoggedInUser {
     full_name: string,
     email: string,
     avatar_url?: string
+    role_name: string
 }
