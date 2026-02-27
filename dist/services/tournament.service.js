@@ -12,57 +12,60 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.TournamentService = void 0;
 const tournament_repository_1 = require("../repositories/tournament.repository");
 class TournamentService {
-    constructor() {
-        this.tournamentRepo = new tournament_repository_1.TournamentRepository();
+    createTournament(organizerId, data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            // Basic Validations
+            if (!data.name || !data.org_id || !data.start_date || !data.end_date) {
+                throw new Error("Missing required tournament fields (name, org_id, dates).");
+            }
+            if (!data.categories || data.categories.length === 0) {
+                throw new Error("At least one category is required to create a tournament.");
+            }
+            const startDate = new Date(data.start_date);
+            const endDate = new Date(data.end_date);
+            const deadline = new Date(data.registration_deadline);
+            if (endDate < startDate) {
+                throw new Error("End date cannot be before the start date.");
+            }
+            if (deadline > endDate) {
+                throw new Error("Registration deadline cannot be after the tournament ends.");
+            }
+            const tournamentRepository = new tournament_repository_1.TournamentRepository();
+            const result = yield tournamentRepository.createTournamentWithCategories(organizerId, data);
+            return result;
+        });
     }
     getAllTournaments() {
         return __awaiter(this, void 0, void 0, function* () {
-            const tournaments = yield this.tournamentRepo.fetchAllTournaments();
-            // Frontend ke hisaab se mapping
-            return tournaments.map(t => ({
-                id: t.id,
-                name: t.name,
-                location: t.location,
-                startDate: t.start_date,
-                status: t.status,
-                banner: t.banner_url || 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=800&auto=format&fit=crop', // Default fallback
-                participants: 0, // Abhi ke liye 0, baad mein registration count lagayenge
-                prizePool: '₹50,000' // Mock data
-            }));
+            const tournamentRepository = new tournament_repository_1.TournamentRepository();
+            return yield tournamentRepository.findAll();
         });
     }
-    getTournamentDetails(id) {
+    getTournamentById(id) {
         return __awaiter(this, void 0, void 0, function* () {
-            const tournament = yield this.tournamentRepo.fetchTournamentById(id);
-            if (!tournament)
-                return null;
-            const categories = yield this.tournamentRepo.fetchCategoriesByTournamentId(id);
-            return {
-                id: tournament.id,
-                name: tournament.name,
-                organizer: 'SmashFIT Admin', // Ise baad mein organizer_id se fetch karenge
-                location: tournament.location,
-                startDate: tournament.start_date,
-                endDate: tournament.end_date,
-                registrationDeadline: tournament.registration_deadline,
-                status: tournament.status,
-                banner: tournament.banner_url || 'https://images.unsplash.com/photo-1626224583764-f87db24ac4ea?q=80&w=1200&auto=format&fit=crop',
-                description: tournament.description || 'Welcome to the tournament!',
-                prizePool: '₹50,000',
-                rules: [
-                    'Standard BWF scoring system (Best of 3, 21 points).',
-                    'Non-marking shoes are strictly mandatory.',
-                    'Players must report 30 minutes before their scheduled match.'
-                ],
-                categories: categories.map(c => ({
-                    id: c.id,
-                    name: c.category_name,
-                    type: c.match_type,
-                    slots: c.max_slots,
-                    filled: c.current_slots || 0,
-                    fee: '₹500' // Hardcoded for MVP
-                }))
-            };
+            const tournamentRepository = new tournament_repository_1.TournamentRepository();
+            const tournament = yield tournamentRepository.findById(id);
+            if (!tournament) {
+                throw new Error("Tournament not found");
+            }
+            return tournament;
+        });
+    }
+    // Import RegistrationRequest at the top if you haven't
+    registerForTournament(playerId, data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (!data.category_id) {
+                throw new Error("Category ID is required to register.");
+            }
+            // Auto-assign player_1_id to the logged-in user if not explicitly sent
+            const registrationData = Object.assign(Object.assign({}, data), { player_1_id: data.player_1_id || playerId });
+            const tournamentRepository = new tournament_repository_1.TournamentRepository();
+            // defensive duplicate check before hitting DB insert
+            const already = yield tournamentRepository.isPlayerRegistered(registrationData.category_id, registrationData.player_1_id);
+            if (already) {
+                throw new Error("You are already registered for this category.");
+            }
+            return yield tournamentRepository.registerPlayer(registrationData);
         });
     }
 }
