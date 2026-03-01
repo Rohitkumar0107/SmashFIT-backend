@@ -1,7 +1,7 @@
 export interface LoggedInUser {
-    id: string,
-    full_name: string,
-    email: string,
-    avatar_url?: string
-    role_name: string
+  id: string;
+  email: string;
+  role: string;
+  full_name?: string;
+  avatar_url?: string;
 }

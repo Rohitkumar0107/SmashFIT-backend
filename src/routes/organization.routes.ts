@@ -1,24 +1,67 @@
 import { Router } from "express";
-import { getAllOrganizations, getOrganizationById, createOrganization, updateOrganization, deleteOrganization } from "../controllers/organization.controller";
-import { verifyAuth, requireRole } from "../middlewares/auth.middleware";
-
+import {
+    getAllOrganizations,
+    getOrganizationById,
+    createOrganization,
+    updateOrganization,
+    deleteOrganization,
+    inviteMember,
+    acceptInvite,
+    updateMemberRoles,
+    createVoucher,
+    getMembers
+} from "../controllers/organization.controller";
+import { verifyAuth } from "../middlewares/auth.middleware";
 
 const router = Router();
 
-// for get all 
-router.get("/all", getAllOrganizations);
+// ==========================================
+// 1. PUBLIC ROUTES
+// ==========================================
 
-// for get by id
+// GET /api/organizations
+router.get("/", getAllOrganizations);
+
+// GET /api/organizations/:id
 router.get("/:id", getOrganizationById);
 
 
-// for create
-router.post("/create", verifyAuth, createOrganization);
+// ==========================================
+// 2. PROTECTED BASE ROUTES
+// ==========================================
 
-// for update only one he created
+// POST /api/organizations
+router.post("/", verifyAuth, createOrganization);
+
+// PUT /api/organizations/:id
 router.put("/:id", verifyAuth, updateOrganization);
 
-// for delete only one he created
+// DELETE /api/organizations/:id
 router.delete("/:id", verifyAuth, deleteOrganization);
+
+
+// ==========================================
+// 3. MULTI-TENANCY & STAFF MANAGEMENT
+// ==========================================
+
+// POST /api/organizations/:id/invite -> Issue an invite
+router.post("/:id/invite", verifyAuth, inviteMember);
+
+// POST /api/organizations/:id/accept-invite -> Consume token to join staff
+router.post("/:id/accept-invite", verifyAuth, acceptInvite);
+
+// GET /api/organizations/:id/members -> Retrieve staff lists
+router.get("/:id/members", verifyAuth, getMembers);
+
+// POST /api/organizations/:id/roles -> Swap member designations
+router.post("/:id/roles", verifyAuth, updateMemberRoles);
+
+
+// ==========================================
+// 4. BUSINESS LOGIC & COMMERCE
+// ==========================================
+
+// POST /api/organizations/:id/vouchers -> Admin level creation of discount codes
+router.post("/:id/vouchers", verifyAuth, createVoucher);
 
 export default router;

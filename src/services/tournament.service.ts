@@ -1,82 +1,178 @@
 import { TournamentRepository } from "../repositories/tournament.repository";
-import { TournamentRequest } from "../models/tournament.model";
+import { OrganizationRepository } from "../repositories/organization.repository";
+
+// Helper function
+const generateSlug = (name: string) => {
+  return name.toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)+/g, '') + '-' + Date.now().toString().slice(-4);
+};
 
 export class TournamentService {
-  async createTournament(organizerId: string, data: TournamentRequest) {
-    // Basic Validations
-    if (!data.name || !data.org_id || !data.start_date || !data.end_date) {
-      throw new Error(
-        "Missing required tournament fields (name, org_id, dates).",
-      );
+  private repository: TournamentRepository;
+  private orgRepo: OrganizationRepository;
+
+  constructor() {
+    this.repository = new TournamentRepository();
+    this.orgRepo = new OrganizationRepository();
+  }
+
+  async authorizeOrgAction(orgId: string, userId: string, allowedRoles: string[]) {
+    const hasRole = await this.orgRepo.verifyMembership(orgId, userId, allowedRoles);
+    if (!hasRole) throw new Error(`Unauthorized: Requires one of [${allowedRoles.join(", ")}] roles in this organization.`);
+    return true;
+  }
+
+  // ----------------------------------------------------
+  // LIFECYCLE MANAGEMENT
+  // ----------------------------------------------------
+
+  async createTournament(organizationId: string, creatorId: string, data: any) {
+    await this.authorizeOrgAction(organizationId, creatorId, ["OWNER", "ADMIN"]);
+
+    if (!data.name) throw new Error("Tournament name is required");
+
+    const slug = generateSlug(data.name);
+    const payload = { ...data, slug };
+
+    return await this.repository.create(organizationId, creatorId, payload);
+  }
+
+  async getAllTournaments(filters: { status?: string, sport?: string, date?: string }) {
+    return await this.repository.findAll(filters);
+  }
+
+  async getTournamentById(id: string) {
+    return await this.repository.findById(id);
+  }
+
+  async updateTournament(id: string, requesterId: string, data: any) {
+    const tournament = await this.getTournamentById(id);
+    if (!tournament) throw new Error("Tournament not found");
+
+    await this.authorizeOrgAction(tournament.organization_id, requesterId, ["OWNER", "ADMIN"]);
+
+    // Auto gen new slug if name changes
+    const slug = data.name ? generateSlug(data.name) : undefined;
+    const payload = { ...data, slug };
+
+    return await this.repository.update(id, payload);
+  }
+
+  async publishTournament(id: string, requesterId: string) {
+    const tournament = await this.getTournamentById(id);
+    if (!tournament) throw new Error("Tournament not found");
+
+    await this.authorizeOrgAction(tournament.organization_id, requesterId, ["OWNER", "ADMIN"]);
+
+    if (tournament.status !== 'DRAFT') throw new Error("Only DRAFT tournaments can be published.");
+    return await this.repository.updateStatus(id, 'PUBLISHED');
+  }
+
+  async deleteTournament(id: string, requesterId: string) {
+    const tournament = await this.getTournamentById(id);
+    if (!tournament) throw new Error("Tournament not found");
+
+    await this.authorizeOrgAction(tournament.organization_id, requesterId, ["OWNER"]);
+    return await this.repository.delete(id);
+  }
+
+  async cloneTournament(id: string, requesterId: string) {
+    const tournament = await this.getTournamentById(id);
+    if (!tournament) throw new Error("Tournament not found");
+
+    await this.authorizeOrgAction(tournament.organization_id, requesterId, ["OWNER", "ADMIN"]);
+
+    // Create new draft with same fundamental config
+    const newName = `${tournament.name} (Copy)`;
+    const payload = {
+      ...tournament,
+      name: newName,
+      start_date: null,
+      end_date: null,
+      registration_open: null,
+      registration_close: null
+    };
+
+    return await this.createTournament(tournament.organization_id, requesterId, payload);
+  }
+
+  // ----------------------------------------------------
+  // REGISTRATION FLOW
+  // ----------------------------------------------------
+
+  async registerUser(tournamentId: string, userId: string) {
+    const tournament = await this.getTournamentById(tournamentId);
+    if (!tournament) throw new Error("Tournament not found");
+
+    if (tournament.status !== 'PUBLISHED' && tournament.status !== 'ONGOING') {
+      throw new Error("Registration is closed or not yet active for this event.");
     }
 
-    if (!data.categories || data.categories.length === 0) {
-      throw new Error(
-        "At least one category is required to create a tournament.",
-      );
+    const registeredCount = await this.repository.getParticipantCount(tournamentId, 'REGISTERED');
+
+    // Business Logic: Overflow directly to waitlist if max capacity hit
+    const status = registeredCount >= tournament.max_participants ? 'WAITLISTED' : 'REGISTERED';
+
+    return await this.repository.registerParticipant(tournamentId, userId, status);
+  }
+
+  async cancelRegistration(tournamentId: string, userId: string) {
+    const result = await this.repository.cancelRegistration(tournamentId, userId);
+
+    if (!result) return null;
+
+    // Auto-promote oldest Waitlist to Registered (if applicable)
+    const tournament = await this.getTournamentById(tournamentId);
+    if (tournament) {
+      const currentRegistered = await this.repository.getParticipantCount(tournamentId, 'REGISTERED');
+      if (currentRegistered < tournament.max_participants) {
+        const oldestWaitlist = await this.repository.getOldestWaitlisted(tournamentId);
+        if (oldestWaitlist) {
+          await this.repository.updateParticipantStatus(tournamentId, oldestWaitlist.user_id, 'REGISTERED');
+          // Note: We could dispatch an email here "You've been pulled off the waitlist!"
+        }
+      }
     }
+    return result;
+  }
 
-    const startDate = new Date(data.start_date);
-    const endDate = new Date(data.end_date);
-    const deadline = new Date(data.registration_deadline);
+  async getLineup(tournamentId: string, requesterId: string, filterStatus?: string) {
+    const tournament = await this.getTournamentById(tournamentId);
+    if (!tournament) throw new Error("Tournament not found");
 
-    if (endDate < startDate) {
-      throw new Error("End date cannot be before the start date.");
-    }
+    // Optionally protect waitlists and internal lists to Staff
+    // Waitlist logic checking could happen here. Skipping complex protection for now assuming general entries are public.
 
-    if (deadline > endDate) {
-      throw new Error(
-        "Registration deadline cannot be after the tournament ends.",
-      );
-    }
+    return await this.repository.getParticipants(tournamentId, filterStatus);
+  }
 
-    const tournamentRepository = new TournamentRepository();
-    const result = await tournamentRepository.createTournamentWithCategories(
-      organizerId,
-      data,
-    );
+  // ----------------------------------------------------
+  // IN-PERSON EVENT LOGIC
+  // ----------------------------------------------------
+
+  async signWaiver(tournamentId: string, userId: string) {
+    const result = await this.repository.signWaiver(tournamentId, userId);
+    if (!result) throw new Error("Failed to sign waiver. Ensure you are registered first.");
+    return result;
+  }
+
+  async checkInPlayer(tournamentId: string, staffRequesterId: string, targetUserId: string) {
+    const tournament = await this.getTournamentById(tournamentId);
+    if (!tournament) throw new Error("Tournament not found");
+
+    await this.authorizeOrgAction(tournament.organization_id, staffRequesterId, ["OWNER", "ADMIN", "STAFF"]);
+
+    const result = await this.repository.checkInParticipant(tournamentId, targetUserId);
+    if (!result) throw new Error("Participant must be explicitly REGISTERED and have signed the Waiver before Check-In is permitted.");
 
     return result;
   }
 
-  async getAllTournaments() {
-    const tournamentRepository = new TournamentRepository();
-    return await tournamentRepository.findAll();
-  }
+  async logShuttles(tournamentId: string, staffRequesterId: string, brand: string, quantity: number) {
+    const tournament = await this.getTournamentById(tournamentId);
+    if (!tournament) throw new Error("Tournament not found");
 
-  async getTournamentById(id: string) {
-    const tournamentRepository = new TournamentRepository();
-    const tournament = await tournamentRepository.findById(id);
+    await this.authorizeOrgAction(tournament.organization_id, staffRequesterId, ["OWNER", "ADMIN", "STAFF"]);
 
-    if (!tournament) {
-      throw new Error("Tournament not found");
-    }
-    return tournament;
-  }
-
-  // Import RegistrationRequest at the top if you haven't
-  async registerForTournament(playerId: string, data: any) {
-    if (!data.category_id) {
-      throw new Error("Category ID is required to register.");
-    }
-
-    // Auto-assign player_1_id to the logged-in user if not explicitly sent
-    const registrationData = {
-      ...data,
-      player_1_id: data.player_1_id || playerId,
-    };
-
-    const tournamentRepository = new TournamentRepository();
-
-    // defensive duplicate check before hitting DB insert
-    const already = await tournamentRepository.isPlayerRegistered(
-      registrationData.category_id,
-      registrationData.player_1_id,
-    );
-    if (already) {
-      throw new Error("You are already registered for this category.");
-    }
-
-    return await tournamentRepository.registerPlayer(registrationData);
+    return await this.repository.logShuttles(tournamentId, staffRequesterId, brand, quantity);
   }
 }
