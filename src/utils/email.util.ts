@@ -27,19 +27,19 @@ if (
 }
 
 const buildTransportOptions = async () => {
-  // Ensure we have an IPv4-resolvable host to avoid IPv6 ENETUNREACH
+  // Always explicitly resolve an IPv4 address for the SMTP host
+  // This avoids IPv6 ENETUNREACH issues in environments like Vercel Serverless
   let hostToUse = SMTP_HOST;
+  let useIPHostConfig = false;
+
   try {
-    // If Node supports setting default result order we've already set it above.
-    // If not, explicitly resolve an IPv4 address for the SMTP host and use it.
-    if (typeof (dns as any).setDefaultResultOrder !== "function") {
-      const lookup = await dns.promises.lookup(SMTP_HOST, { family: 4 });
-      if (lookup && lookup.address) {
-        hostToUse = lookup.address;
-        console.warn(
-          `⚠️ DNS fallback: using IPv4 address ${hostToUse} for ${SMTP_HOST}`,
-        );
-      }
+    const lookup = await dns.promises.lookup(SMTP_HOST, { family: 4 });
+    if (lookup && lookup.address) {
+      hostToUse = lookup.address;
+      useIPHostConfig = true;
+      console.warn(
+        `⚠️ DNS fallback: explicitly using IPv4 address ${hostToUse} for ${SMTP_HOST}`,
+      );
     }
   } catch (err: any) {
     console.warn(
@@ -48,6 +48,20 @@ const buildTransportOptions = async () => {
     );
     hostToUse = SMTP_HOST;
   }
+
+  const baseOpts = {
+    host: hostToUse,
+    port: SMTP_PORT,
+    secure: SMTP_PORT === 465, // true for 465, false for other ports
+    name: SMTP_HOST, // Needed for HELO/EHLO if we pass IP as host
+    ...(useIPHostConfig ? { tls: { servername: SMTP_HOST } } : {}), // For TLS Validation
+    logger: false,
+    debug: false,
+    connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
+    greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 5000),
+    socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 10000),
+  };
+
   // If OAuth2 env vars are present, prefer OAuth2
   const clientId =
     process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
@@ -65,9 +79,7 @@ const buildTransportOptions = async () => {
       const { token } = await oAuth2Client.getAccessToken();
 
       return {
-        host: hostToUse,
-        port: SMTP_PORT,
-        secure: SMTP_PORT === 465,
+        ...baseOpts,
         auth: {
           type: "OAuth2",
           user: SMTP_USER,
@@ -76,15 +88,6 @@ const buildTransportOptions = async () => {
           clientSecret,
           refreshToken,
         },
-        // Disable nodemailer's verbose protocol logging in production/local
-        logger: false,
-        debug: false,
-        // Add sensible timeouts to fail fast in environments where SMTP is blocked
-        connectionTimeout: Number(
-          process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000,
-        ),
-        greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 5000),
-        socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 10000),
       } as any;
     } catch (err) {
       console.warn(
@@ -95,19 +98,11 @@ const buildTransportOptions = async () => {
 
   // Fallback to simple user/pass auth (App Password)
   return {
-    host: hostToUse,
-    port: SMTP_PORT,
-    secure: SMTP_PORT === 465, // true for 465, false for other ports
+    ...baseOpts,
     auth: {
       user: SMTP_USER,
       pass: SMTP_PASS,
     },
-    // Disable nodemailer's verbose protocol logging in production/local
-    logger: false,
-    debug: false,
-    connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
-    greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 5000),
-    socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 10000),
   } as any;
 };
 

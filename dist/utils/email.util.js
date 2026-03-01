@@ -33,6 +33,23 @@ if ((SMTP_USER === null || SMTP_USER === void 0 ? void 0 : SMTP_USER.endsWith("@
     console.warn("⚠️ It looks like you're using a Gmail account but the SMTP_PASS value", "is not 16 characters long. Make sure you've created a Gmail App Password", "(requires 2FA) rather than using your normal account password.");
 }
 const buildTransportOptions = () => __awaiter(void 0, void 0, void 0, function* () {
+    // Always explicitly resolve an IPv4 address for the SMTP host
+    // This avoids IPv6 ENETUNREACH issues in environments like Vercel Serverless
+    let hostToUse = SMTP_HOST;
+    let useIPHostConfig = false;
+    try {
+        const lookup = yield dns_1.default.promises.lookup(SMTP_HOST, { family: 4 });
+        if (lookup && lookup.address) {
+            hostToUse = lookup.address;
+            useIPHostConfig = true;
+            console.warn(`⚠️ DNS fallback: explicitly using IPv4 address ${hostToUse} for ${SMTP_HOST}`);
+        }
+    }
+    catch (err) {
+        console.warn("Could not resolve IPv4 address for SMTP host:", (err === null || err === void 0 ? void 0 : err.message) || err);
+        hostToUse = SMTP_HOST;
+    }
+    const baseOpts = Object.assign(Object.assign({ host: hostToUse, port: SMTP_PORT, secure: SMTP_PORT === 465, name: SMTP_HOST }, (useIPHostConfig ? { tls: { servername: SMTP_HOST } } : {})), { logger: false, debug: false, connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000), greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 5000), socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 10000) });
     // If OAuth2 env vars are present, prefer OAuth2
     const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
@@ -45,47 +62,24 @@ const buildTransportOptions = () => __awaiter(void 0, void 0, void 0, function* 
             const oAuth2Client = new google.auth.OAuth2(clientId, clientSecret);
             oAuth2Client.setCredentials({ refresh_token: refreshToken });
             const { token } = yield oAuth2Client.getAccessToken();
-            return {
-                host: SMTP_HOST,
-                port: SMTP_PORT,
-                secure: SMTP_PORT === 465,
-                auth: {
+            return Object.assign(Object.assign({}, baseOpts), { auth: {
                     type: "OAuth2",
                     user: SMTP_USER,
                     accessToken: token,
                     clientId,
                     clientSecret,
                     refreshToken,
-                },
-                // Disable nodemailer's verbose protocol logging in production/local
-                logger: false,
-                debug: false,
-                // Add sensible timeouts to fail fast in environments where SMTP is blocked
-                connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
-                greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 5000),
-                socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 10000),
-            };
+                } });
         }
         catch (err) {
             console.warn("googleapis not installed — skipping OAuth2 transport setup");
         }
     }
     // Fallback to simple user/pass auth (App Password)
-    return {
-        host: SMTP_HOST,
-        port: SMTP_PORT,
-        secure: SMTP_PORT === 465, // true for 465, false for other ports
-        auth: {
+    return Object.assign(Object.assign({}, baseOpts), { auth: {
             user: SMTP_USER,
             pass: SMTP_PASS,
-        },
-        // Disable nodemailer's verbose protocol logging in production/local
-        logger: false,
-        debug: false,
-        connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
-        greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 5000),
-        socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 10000),
-    };
+        } });
 });
 let transporterPromise = null;
 const getTransporter = () => __awaiter(void 0, void 0, void 0, function* () {
