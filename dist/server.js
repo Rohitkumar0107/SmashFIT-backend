@@ -64,6 +64,7 @@ const http_1 = __importDefault(require("http"));
 const socket_io_1 = require("socket.io");
 const match_controller_1 = require("./controllers/match.controller");
 const match_controller_2 = require("./controllers/match.controller");
+const email_util_1 = require("./utils/email.util");
 function startServer() {
     const app = (0, express_1.default)();
     app.use((0, cors_1.default)(cors_config_1.corsConfig));
@@ -151,5 +152,9 @@ function startServer() {
     // 🚨 5. SABSE IMPORTANT: app.listen ko hta kar server.listen karna hai!
     server.listen(PORT, () => {
         console.log(`🚀 Server running on port ${PORT}`);
+    });
+    // Verify SMTP connection and log any issues (doesn't block server start)
+    (0, email_util_1.verifyEmailConnection)().catch((err) => {
+        console.error("SMTP verification failed during startup:", (err === null || err === void 0 ? void 0 : err.message) || err);
     });
 }

@@ -31,6 +31,7 @@ import {
   getTournamentMatches,
   generateBracket,
 } from "./controllers/match.controller";
+import { verifyEmailConnection } from "./utils/email.util";
 
 export function startServer() {
   const app = express();
@@ -135,5 +136,13 @@ export function startServer() {
   // 🚨 5. SABSE IMPORTANT: app.listen ko hta kar server.listen karna hai!
   server.listen(PORT, () => {
     console.log(`🚀 Server running on port ${PORT}`);
+  });
+
+  // Verify SMTP connection and log any issues (doesn't block server start)
+  verifyEmailConnection().catch((err) => {
+    console.error(
+      "SMTP verification failed during startup:",
+      err?.message || err,
+    );
   });
 }
