@@ -61,11 +61,11 @@ class authService {
                 password: hashedPassword,
             };
             yield repository.saveOtp(userData.email, otp, "ACTIVATION", expiresAt, pendingUserData);
-            // 4. Send Email
+            // 4. Send Email (non-blocking so SMTP issues don't hang the endpoint)
             // build a token the frontend or user can POST back to /api/auth/verify-email
             const token = Buffer.from(`${userData.email}:${otp}`).toString("base64");
             const { subject, text, html } = (0, email_templates_util_1.getRegistrationOtpTemplate)(otp, token);
-            yield (0, email_util_1.sendEmail)(userData.email, subject, text, html);
+            (0, email_util_1.sendEmail)(userData.email, subject, text, html).catch((err) => console.error(`[Registration OTP] Email send failed for ${userData.email}:`, (err === null || err === void 0 ? void 0 : err.message) || err));
             return {
                 message: "Account pending. OTP sent to your email to verify registration.",
             };
@@ -272,9 +272,9 @@ class authService {
             // TODO: Yahan apna Email bhejne ka logic lagana
             // OTP DB mein save karne ke baad:
             yield repository.saveOtp(email, otp, "RESET", expiresAt);
-            // Naya Email bhejne ka logic
+            // Naya Email bhejne ka logic (non-blocking so SMTP issues don't hang the endpoint)
             const { subject, text, html } = (0, email_templates_util_1.getPasswordResetOtpTemplate)(otp);
-            yield (0, email_util_1.sendEmail)(email, subject, text, html);
+            (0, email_util_1.sendEmail)(email, subject, text, html).catch((err) => console.error(`[Forgot Password OTP] Email send failed for ${email}:`, (err === null || err === void 0 ? void 0 : err.message) || err));
         });
     }
     // NEW: Verify Reset OTP & Give Temporary Token
@@ -342,9 +342,9 @@ class authService {
                 full_name: user.full_name,
             };
             yield repository.saveOtp(email, otp, "LOGIN", expiresAt, loginMetadata);
-            // Send OTP email
+            // Send OTP email (non-blocking so SMTP issues don't hang the endpoint)
             const { subject, text, html } = (0, email_templates_util_1.getRegistrationOtpTemplate)(otp, "");
-            yield (0, email_util_1.sendEmail)(email, subject, text, html);
+            (0, email_util_1.sendEmail)(email, subject, text, html).catch((err) => console.error(`[Login OTP] Email send failed for ${email}:`, (err === null || err === void 0 ? void 0 : err.message) || err));
             return {
                 message: "OTP sent to your email. Please verify to complete login.",
                 email: email, // Frontend ko email bhej rahe hain taakih woh OTP page mein use kar sake
@@ -431,9 +431,9 @@ class authService {
                 existingUserId: (user === null || user === void 0 ? void 0 : user.id) || null,
             };
             yield repository.saveOtp(email, otp, "OAUTH", expiresAt, oauthMetadata);
-            // Send OTP email
+            // Send OTP email (non-blocking so SMTP issues don't hang the endpoint)
             const { subject, text, html } = (0, email_templates_util_1.getRegistrationOtpTemplate)(otp, "");
-            yield (0, email_util_1.sendEmail)(email, subject, text, html);
+            (0, email_util_1.sendEmail)(email, subject, text, html).catch((err) => console.error(`[OAuth OTP] Email send failed for ${email}:`, (err === null || err === void 0 ? void 0 : err.message) || err));
             return {
                 message: "OTP sent to your email. Please verify to complete OAuth login.",
                 email: email,

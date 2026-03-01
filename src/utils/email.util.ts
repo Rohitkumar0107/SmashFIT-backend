@@ -6,7 +6,6 @@ const SMTP_PORT = Number(process.env.SMTP_PORT || "465");
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = process.env.SMTP_PASS?.trim();
 
-
 // quick sanity check: Gmail app passwords are 16 chars long
 if (
   SMTP_USER?.endsWith("@gmail.com") &&
@@ -52,6 +51,12 @@ const buildTransportOptions = async () => {
         },
         logger: true,
         debug: true,
+        // Add sensible timeouts to fail fast in environments where SMTP is blocked
+        connectionTimeout: Number(
+          process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000,
+        ),
+        greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 5000),
+        socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 10000),
       } as any;
     } catch (err) {
       console.warn(
@@ -71,6 +76,9 @@ const buildTransportOptions = async () => {
     },
     logger: true,
     debug: true,
+    connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
+    greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 5000),
+    socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 10000),
   } as any;
 };
 
@@ -148,10 +156,45 @@ export const sendEmail = async (
       html: html || `<div style="font-family:sans-serif">${text}</div>`,
     };
 
-    const info = await transporter.sendMail(mailOptions as any);
+    try {
+      const info = await transporter.sendMail(mailOptions as any);
+      console.log("📧 Email sent:", info.messageId || info.messageId);
+      return true;
+    } catch (smtpErr: any) {
+      // Log detailed SMTP error
+      console.error(
+        "SMTP sendMail failed:",
+        smtpErr?.code || "-",
+        smtpErr?.responseCode || "-",
+        smtpErr?.message || smtpErr,
+      );
 
-    console.log("📧 Email sent:", info.messageId || info.messageId);
-    return true;
+      // If SendGrid (or other HTTP provider) is configured, attempt a fallback
+      const sendgridKey = process.env.SENDGRID_API_KEY;
+      if (sendgridKey) {
+        try {
+          // dynamic import so @sendgrid/mail is optional
+          // eslint-disable-next-line @typescript-eslint/no-var-requires
+          const sg = require("@sendgrid/mail");
+          sg.setApiKey(sendgridKey);
+          const sgMsg = {
+            to,
+            from: SMTP_USER,
+            subject,
+            text,
+            html: html || `<div style="font-family:sans-serif">${text}</div>`,
+          };
+          await sg.send(sgMsg);
+          console.log("📧 Email sent via SendGrid fallback");
+          return true;
+        } catch (sgErr: any) {
+          console.error("SendGrid fallback failed:", sgErr?.message || sgErr);
+        }
+      }
+
+      // rethrow original SMTP error if no fallback succeeded
+      throw smtpErr;
+    }
   } catch (error: any) {
     console.error("❌ Email send error:");
     console.error(

@@ -59,11 +59,16 @@ export class authService {
       pendingUserData,
     );
 
-    // 4. Send Email
+    // 4. Send Email (non-blocking so SMTP issues don't hang the endpoint)
     // build a token the frontend or user can POST back to /api/auth/verify-email
     const token = Buffer.from(`${userData.email}:${otp}`).toString("base64");
     const { subject, text, html } = getRegistrationOtpTemplate(otp, token);
-    await sendEmail(userData.email, subject, text, html);
+    sendEmail(userData.email, subject, text, html).catch((err) =>
+      console.error(
+        `[Registration OTP] Email send failed for ${userData.email}:`,
+        err?.message || err,
+      ),
+    );
 
     return {
       message:
@@ -336,10 +341,15 @@ export class authService {
     // OTP DB mein save karne ke baad:
     await repository.saveOtp(email, otp, "RESET", expiresAt);
 
-    // Naya Email bhejne ka logic
+    // Naya Email bhejne ka logic (non-blocking so SMTP issues don't hang the endpoint)
     const { subject, text, html } = getPasswordResetOtpTemplate(otp);
 
-    await sendEmail(email, subject, text, html);
+    sendEmail(email, subject, text, html).catch((err) =>
+      console.error(
+        `[Forgot Password OTP] Email send failed for ${email}:`,
+        err?.message || err,
+      ),
+    );
   }
 
   // NEW: Verify Reset OTP & Give Temporary Token
@@ -417,9 +427,14 @@ export class authService {
 
     await repository.saveOtp(email, otp, "LOGIN", expiresAt, loginMetadata);
 
-    // Send OTP email
+    // Send OTP email (non-blocking so SMTP issues don't hang the endpoint)
     const { subject, text, html } = getRegistrationOtpTemplate(otp, "");
-    await sendEmail(email, subject, text, html);
+    sendEmail(email, subject, text, html).catch((err) =>
+      console.error(
+        `[Login OTP] Email send failed for ${email}:`,
+        err?.message || err,
+      ),
+    );
 
     return {
       message: "OTP sent to your email. Please verify to complete login.",
@@ -546,9 +561,14 @@ export class authService {
 
     await repository.saveOtp(email, otp, "OAUTH", expiresAt, oauthMetadata);
 
-    // Send OTP email
+    // Send OTP email (non-blocking so SMTP issues don't hang the endpoint)
     const { subject, text, html } = getRegistrationOtpTemplate(otp, "");
-    await sendEmail(email, subject, text, html);
+    sendEmail(email, subject, text, html).catch((err) =>
+      console.error(
+        `[OAuth OTP] Email send failed for ${email}:`,
+        err?.message || err,
+      ),
+    );
 
     return {
       message: "OTP sent to your email. Please verify to complete OAuth login.",

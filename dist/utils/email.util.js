@@ -54,6 +54,10 @@ const buildTransportOptions = () => __awaiter(void 0, void 0, void 0, function* 
                 },
                 logger: true,
                 debug: true,
+                // Add sensible timeouts to fail fast in environments where SMTP is blocked
+                connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
+                greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 5000),
+                socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 10000),
             };
         }
         catch (err) {
@@ -71,6 +75,9 @@ const buildTransportOptions = () => __awaiter(void 0, void 0, void 0, function* 
         },
         logger: true,
         debug: true,
+        connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
+        greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 5000),
+        socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 10000),
     };
 });
 let transporterPromise = null;
@@ -121,9 +128,40 @@ const sendEmail = (to, subject, text, html) => __awaiter(void 0, void 0, void 0,
             text,
             html: html || `<div style="font-family:sans-serif">${text}</div>`,
         };
-        const info = yield transporter.sendMail(mailOptions);
-        console.log("📧 Email sent:", info.messageId || info.messageId);
-        return true;
+        try {
+            const info = yield transporter.sendMail(mailOptions);
+            console.log("📧 Email sent:", info.messageId || info.messageId);
+            return true;
+        }
+        catch (smtpErr) {
+            // Log detailed SMTP error
+            console.error("SMTP sendMail failed:", (smtpErr === null || smtpErr === void 0 ? void 0 : smtpErr.code) || "-", (smtpErr === null || smtpErr === void 0 ? void 0 : smtpErr.responseCode) || "-", (smtpErr === null || smtpErr === void 0 ? void 0 : smtpErr.message) || smtpErr);
+            // If SendGrid (or other HTTP provider) is configured, attempt a fallback
+            const sendgridKey = process.env.SENDGRID_API_KEY;
+            if (sendgridKey) {
+                try {
+                    // dynamic import so @sendgrid/mail is optional
+                    // eslint-disable-next-line @typescript-eslint/no-var-requires
+                    const sg = require("@sendgrid/mail");
+                    sg.setApiKey(sendgridKey);
+                    const sgMsg = {
+                        to,
+                        from: SMTP_USER,
+                        subject,
+                        text,
+                        html: html || `<div style="font-family:sans-serif">${text}</div>`,
+                    };
+                    yield sg.send(sgMsg);
+                    console.log("📧 Email sent via SendGrid fallback");
+                    return true;
+                }
+                catch (sgErr) {
+                    console.error("SendGrid fallback failed:", (sgErr === null || sgErr === void 0 ? void 0 : sgErr.message) || sgErr);
+                }
+            }
+            // rethrow original SMTP error if no fallback succeeded
+            throw smtpErr;
+        }
     }
     catch (error) {
         console.error("❌ Email send error:");
