@@ -27,34 +27,20 @@ if (
 }
 
 const buildTransportOptions = async () => {
-  // Always explicitly resolve an IPv4 address for the SMTP host
-  // This avoids IPv6 ENETUNREACH issues in environments like Vercel Serverless
-  let hostToUse = SMTP_HOST;
-  let useIPHostConfig = false;
-
-  try {
-    const lookup = await dns.promises.lookup(SMTP_HOST, { family: 4 });
-    if (lookup && lookup.address) {
-      hostToUse = lookup.address;
-      useIPHostConfig = true;
-      console.warn(
-        `⚠️ DNS fallback: explicitly using IPv4 address ${hostToUse} for ${SMTP_HOST}`,
-      );
-    }
-  } catch (err: any) {
-    console.warn(
-      "Could not resolve IPv4 address for SMTP host:",
-      err?.message || err,
-    );
-    hostToUse = SMTP_HOST;
-  }
+  // Vercel Serverless (AWS) often blocks or limits outbound port 587, causing ETIMEDOUT.
+  // We automatically force port 465 (SMTPS) for Gmail to avoid these connection timeouts.
+  const isGmail = SMTP_HOST.includes("gmail.com");
+  const actualPort = isGmail && SMTP_PORT === 587 ? 465 : SMTP_PORT;
+  const isSecure = actualPort === 465;
 
   const baseOpts = {
-    host: hostToUse,
-    port: SMTP_PORT,
-    secure: SMTP_PORT === 465, // true for 465, false for other ports
-    name: SMTP_HOST, // Needed for HELO/EHLO if we pass IP as host
-    ...(useIPHostConfig ? { tls: { servername: SMTP_HOST } } : {}), // For TLS Validation
+    host: SMTP_HOST,
+    port: actualPort,
+    secure: isSecure,
+    // By passing family: 4, Nodemailer's internal DNS will only resolve IPv4.
+    // This prevents misleading ENETUNREACH errors when Vercel falls back to IPv6
+    // after an IPv4 connection timeout.
+    family: 4,
     logger: false,
     debug: false,
     connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),

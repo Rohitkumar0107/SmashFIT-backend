@@ -33,23 +33,25 @@ if ((SMTP_USER === null || SMTP_USER === void 0 ? void 0 : SMTP_USER.endsWith("@
     console.warn("⚠️ It looks like you're using a Gmail account but the SMTP_PASS value", "is not 16 characters long. Make sure you've created a Gmail App Password", "(requires 2FA) rather than using your normal account password.");
 }
 const buildTransportOptions = () => __awaiter(void 0, void 0, void 0, function* () {
-    // Always explicitly resolve an IPv4 address for the SMTP host
-    // This avoids IPv6 ENETUNREACH issues in environments like Vercel Serverless
-    let hostToUse = SMTP_HOST;
-    let useIPHostConfig = false;
-    try {
-        const lookup = yield dns_1.default.promises.lookup(SMTP_HOST, { family: 4 });
-        if (lookup && lookup.address) {
-            hostToUse = lookup.address;
-            useIPHostConfig = true;
-            console.warn(`⚠️ DNS fallback: explicitly using IPv4 address ${hostToUse} for ${SMTP_HOST}`);
-        }
-    }
-    catch (err) {
-        console.warn("Could not resolve IPv4 address for SMTP host:", (err === null || err === void 0 ? void 0 : err.message) || err);
-        hostToUse = SMTP_HOST;
-    }
-    const baseOpts = Object.assign(Object.assign({ host: hostToUse, port: SMTP_PORT, secure: SMTP_PORT === 465, name: SMTP_HOST }, (useIPHostConfig ? { tls: { servername: SMTP_HOST } } : {})), { logger: false, debug: false, connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000), greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 5000), socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 10000) });
+    // Vercel Serverless (AWS) often blocks or limits outbound port 587, causing ETIMEDOUT.
+    // We automatically force port 465 (SMTPS) for Gmail to avoid these connection timeouts.
+    const isGmail = SMTP_HOST.includes("gmail.com");
+    const actualPort = isGmail && SMTP_PORT === 587 ? 465 : SMTP_PORT;
+    const isSecure = actualPort === 465;
+    const baseOpts = {
+        host: SMTP_HOST,
+        port: actualPort,
+        secure: isSecure,
+        // By passing family: 4, Nodemailer's internal DNS will only resolve IPv4.
+        // This prevents misleading ENETUNREACH errors when Vercel falls back to IPv6
+        // after an IPv4 connection timeout.
+        family: 4,
+        logger: false,
+        debug: false,
+        connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
+        greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 5000),
+        socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 10000),
+    };
     // If OAuth2 env vars are present, prefer OAuth2
     const clientId = process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
     const clientSecret = process.env.GOOGLE_OAUTH_CLIENT_SECRET || process.env.GOOGLE_CLIENT_SECRET;
