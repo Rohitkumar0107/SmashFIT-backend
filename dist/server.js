@@ -67,6 +67,8 @@ const match_controller_2 = require("./controllers/match.controller");
 function startServer() {
     const app = (0, express_1.default)();
     app.use((0, cors_1.default)(cors_config_1.corsConfig));
+    // express/cors already handles OPTIONS preflight automatically; explicit wildcard route
+    // was causing path-to-regexp error so removed.
     dotenv_1.default.config();
     app.use((0, cookie_parser_1.default)()); // Cookie parser middleware for handling cookies
     app.use(express_1.default.json());

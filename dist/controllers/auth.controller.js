@@ -211,10 +211,13 @@ const refreshToken = (req, res) => __awaiter(void 0, void 0, void 0, function* (
 });
 exports.refreshToken = refreshToken;
 const ssoCallback = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    // debug log to see if POST ever hits
+    console.log("SSO callback hit from origin", req.headers.origin, "body:", req.body);
     try {
         // Frontend body mein idToken bhejega
         const { idToken, accessToken, refreshToken, expiresIn } = req.body;
         if (!idToken) {
+            console.warn("SSO callback missing idToken");
             return res
                 .status(400)
                 .json({ success: false, message: "Google Token is required" });

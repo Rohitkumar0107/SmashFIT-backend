@@ -35,6 +35,8 @@ import {
 export function startServer() {
   const app = express();
   app.use(cors(corsConfig));
+  // express/cors already handles OPTIONS preflight automatically; explicit wildcard route
+  // was causing path-to-regexp error so removed.
   dotenv.config();
   app.use(cookieParser()); // Cookie parser middleware for handling cookies
 
