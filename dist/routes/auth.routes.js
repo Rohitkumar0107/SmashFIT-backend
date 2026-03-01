@@ -36,21 +36,41 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
     return (mod && mod.__esModule) ? mod : { "default": mod };
 };
 Object.defineProperty(exports, "__esModule", { value: true });
+// auth.routes.ts
 const express_1 = __importStar(require("express"));
 const auth_controller_1 = __importDefault(require("../controllers/auth.controller"));
 const auth_middleware_1 = require("../middlewares/auth.middleware");
 const router = (0, express_1.Router)();
 router.use(express_1.default.json());
-//for register
-router.post('/register', auth_controller_1.default.register);
-// for login 
-router.post('/login', auth_controller_1.default.login);
-//for refersh token
-router.post('/refresh', auth_controller_1.default.refreshToken);
-//for google login
-router.post('/google', auth_controller_1.default.googleAuth);
-//for logout
-router.post('/logout', auth_middleware_1.verifyAuth, auth_controller_1.default.logout);
-//for profile 
-router.get('/me', auth_middleware_1.verifyAuth, auth_controller_1.default.getProfile);
+router.post("/register", auth_controller_1.default.register);
+// [NEW] Registration OTP Verification
+router.post("/verify-register-otp", auth_controller_1.default.verifyRegistrationOtp);
+// --- LOGIN (Now returns OTP requirement) ---
+router.post("/login", auth_controller_1.default.login);
+// [NEW] Login OTP Verification
+router.post("/verify-login-otp", auth_controller_1.default.verifyLoginOtp);
+// --- SSO ---
+router.get("/oauth/:provider", (req, res) => {
+    // Basic redirect for provider start if needed by frontend
+    const provider = req.params.provider;
+    res.status(200).json({
+        success: true,
+        message: `Initialize ${provider} oauth flow from frontend`,
+    });
+});
+router.post("/sso/callback", auth_controller_1.default.ssoCallback);
+// [NEW] OAuth OTP Verification
+router.post("/verify-oauth-otp", auth_controller_1.default.verifyOAuthOtp);
+// NEW EMAIL VERIFICATION ENDPOINT (token-based)
+router.post("/verify-email", auth_controller_1.default.verifyEmail);
+// --- FORGOT & RESET PASSWORD ROUTES ---
+router.post("/forgot-password", auth_controller_1.default.forgotPassword); // OTP bhejega
+router.post("/verify-reset-otp", auth_controller_1.default.verifyResetOtp); // Reset Token dega
+router.post("/reset-password", auth_controller_1.default.resetPassword); // Password change karega
+// --- PURANE ROUTES ---
+router.post("/refresh", auth_controller_1.default.refreshToken);
+router.post("/logout", auth_middleware_1.verifyAuth, auth_controller_1.default.logout);
+router.get("/me", auth_middleware_1.verifyAuth, auth_controller_1.default.getProfile);
+// [NEW] MFA Routes
+router.post("/mfa/enable", auth_middleware_1.verifyAuth, auth_controller_1.default.enableMfa);
 exports.default = router;

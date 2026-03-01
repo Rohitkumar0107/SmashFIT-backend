@@ -9,41 +9,41 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getTopPlayers = exports.getGlobalLeaderboard = void 0;
+exports.getTopPlayers = exports.recalculateRanks = exports.getTournamentLeaderboard = exports.getGlobalLeaderboard = void 0;
 const leaderboard_service_1 = require("../services/leaderboard.service");
-// Service object bahar define kiya for memory efficiency
-const leaderboardService = new leaderboard_service_1.LeaderboardService();
+const svc = new leaderboard_service_1.LeaderboardService();
+const ok = (res, data) => res.json({ success: true, data });
+const fail = (res, e) => res.status(e.message.includes('not found') ? 404 : 500).json({ success: false, message: e.message });
+// GET /api/leaderboard/global
 const getGlobalLeaderboard = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const data = yield leaderboardService.getLeaderboardData();
-        res.status(200).json({
-            success: true,
-            data: data
-        });
+        const page = req.query.page ? parseInt(req.query.page) : 1;
+        ok(res, yield svc.getGlobalLeaderboard(page));
     }
-    catch (error) {
-        res.status(500).json({
-            success: false,
-            data: null,
-            message: error.message
-        });
+    catch (e) {
+        fail(res, e);
     }
 });
 exports.getGlobalLeaderboard = getGlobalLeaderboard;
-const getTopPlayers = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+// GET /api/tournaments/:id/leaderboard
+const getTournamentLeaderboard = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        const data = yield leaderboardService.getTop(5);
-        res.status(200).json({
-            success: true,
-            data: data
-        });
+        ok(res, yield svc.getTournamentLeaderboard(req.params.id));
     }
-    catch (error) {
-        res.status(500).json({
-            success: false,
-            data: null,
-            message: error.message
-        });
+    catch (e) {
+        fail(res, e);
     }
 });
-exports.getTopPlayers = getTopPlayers;
+exports.getTournamentLeaderboard = getTournamentLeaderboard;
+// POST /api/rankings/recalculate
+const recalculateRanks = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        ok(res, yield svc.recalculateRanks());
+    }
+    catch (e) {
+        fail(res, e);
+    }
+});
+exports.recalculateRanks = recalculateRanks;
+// Keep old export for backward compat
+exports.getTopPlayers = exports.getGlobalLeaderboard;

@@ -15,28 +15,58 @@ class PlayerService {
     constructor() {
         this.repo = new player_repository_1.PlayerRepository();
     }
-    // Profile aur Matches dono ek saath nikalne ke liye
+    claimProfile(userId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return this.repo.claimOrCreate(userId);
+        });
+    }
+    searchPlayers(filters) {
+        return __awaiter(this, void 0, void 0, function* () {
+            var _a;
+            const limit = 20;
+            const offset = (((_a = filters.page) !== null && _a !== void 0 ? _a : 1) - 1) * limit;
+            return this.repo.search(Object.assign(Object.assign({}, filters), { limit, offset }));
+        });
+    }
     getFullProfile(playerId) {
         return __awaiter(this, void 0, void 0, function* () {
-            // Parallel calls for better performance
             const [profile, matches] = yield Promise.all([
                 this.repo.fetchProfileById(playerId),
-                this.repo.fetchRecentMatches(playerId)
+                this.repo.fetchRecentMatches(playerId),
             ]);
-            if (!profile) {
+            if (!profile)
                 throw new Error("Player profile not found");
-            }
             return Object.assign(Object.assign({}, profile), { recent_matches: matches });
         });
     }
-    // 👈 Ye function MISSING tha! Sirf match history nikalne ke liye
+    updateProfile(requesterId, targetId, data) {
+        return __awaiter(this, void 0, void 0, function* () {
+            if (requesterId !== targetId)
+                throw new Error("UNAUTHORIZED");
+            return this.repo.updateProfile(targetId, data);
+        });
+    }
+    getTournamentHistory(playerId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            return this.repo.fetchTournamentHistory(playerId);
+        });
+    }
+    getH2H(userId, otherId) {
+        return __awaiter(this, void 0, void 0, function* () {
+            const [profileA, profileB] = yield Promise.all([
+                this.repo.fetchProfileById(userId),
+                this.repo.fetchProfileById(otherId),
+            ]);
+            if (!profileA || !profileB)
+                throw new Error("One or both player profiles not found");
+            const stats = yield this.repo.fetchH2H(userId, otherId);
+            return Object.assign({ playerA: { id: userId, name: profileA.full_name, avatar: profileA.avatar_url }, playerB: { id: otherId, name: profileB.full_name, avatar: profileB.avatar_url } }, stats);
+        });
+    }
+    // Legacy — kept for backward compat
     getHistory(playerId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const matches = yield this.repo.fetchRecentMatches(playerId);
-            if (!matches) {
-                throw new Error("Player history not found");
-            }
-            return matches;
+            return this.repo.fetchRecentMatches(playerId);
         });
     }
 }

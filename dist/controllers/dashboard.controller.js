@@ -9,30 +9,40 @@ var __awaiter = (this && this.__awaiter) || function (thisArg, _arguments, P, ge
     });
 };
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.getDashboardSummary = void 0;
+exports.getDashboardSummary = exports.getPlayerGrowth = exports.getTournamentDashboard = exports.getOrgDashboard = void 0;
 const dashboard_service_1 = require("../services/dashboard.service");
-const dashboardService = new dashboard_service_1.DashboardService();
-const getDashboardSummary = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+const svc = new dashboard_service_1.DashboardService();
+const ok = (res, data) => res.json({ success: true, data });
+const fail = (res, e) => res.status(500).json({ success: false, message: e.message });
+// GET /api/dashboard/organization/:orgId
+const getOrgDashboard = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
-        // Query param se status uthao (e.g., ?status=LIVE ya ?status=FINISHED)
-        // Agar kuch nahi bheja toh default 'LIVE' matches aayenge
-        const statusFilter = req.query.status || 'LIVE';
-        // Service ko call karo
-        const dashboardData = yield dashboardService.getFullDashboardSummary(statusFilter);
-        // Success Response
-        return res.status(200).json({
-            success: true,
-            message: "Dashboard summary fetched successfully",
-            data: dashboardData
-        });
+        ok(res, yield svc.getOrgMetrics(req.params.orgId));
     }
-    catch (error) {
-        console.error("❌ Dashboard Controller Error:", error);
-        return res.status(500).json({
-            success: false,
-            message: "Dashboard data load karne mein dikkat aayi.",
-            error: process.env.NODE_ENV === 'development' ? error.message : undefined
-        });
+    catch (e) {
+        fail(res, e);
     }
 });
-exports.getDashboardSummary = getDashboardSummary;
+exports.getOrgDashboard = getOrgDashboard;
+// GET /api/dashboard/tournament/:id
+const getTournamentDashboard = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        ok(res, yield svc.getTournamentMetrics(req.params.id));
+    }
+    catch (e) {
+        fail(res, e);
+    }
+});
+exports.getTournamentDashboard = getTournamentDashboard;
+// GET /api/analytics/players/growth
+const getPlayerGrowth = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
+    try {
+        ok(res, yield svc.getPlayerGrowthStats());
+    }
+    catch (e) {
+        fail(res, e);
+    }
+});
+exports.getPlayerGrowth = getPlayerGrowth;
+// Legacy: dashboard summary (kept for old route)
+exports.getDashboardSummary = exports.getTournamentDashboard;

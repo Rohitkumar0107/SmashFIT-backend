@@ -390,4 +390,251 @@ export class authService {
       qrCodeUrl,
     };
   }
+
+  // ==================== NEW: LOGIN OTP METHODS ====================
+
+  // Step 1: Generate OTP after password verification (called from modified loginUser)
+  async initiateLoginOtp(email: string, password: string) {
+    const repository = new authRepository();
+
+    const user = await repository.findUserByEmail(email);
+    if (!user) throw new Error("Invalid email or password");
+
+    const isPasswordMatch = await bcrypt.compare(password, user.password);
+    if (!isPasswordMatch) throw new Error("Invalid email or password");
+
+    // Generate OTP
+    const otp = this.generateOTP();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Store user data in OTP metadata for later use
+    const loginMetadata = {
+      userId: user.id,
+      email: user.email,
+      role_name: user.role_name,
+      full_name: user.full_name,
+    };
+
+    await repository.saveOtp(email, otp, "LOGIN", expiresAt, loginMetadata);
+
+    // Send OTP email
+    const { subject, text, html } = getRegistrationOtpTemplate(otp, "");
+    await sendEmail(email, subject, text, html);
+
+    return {
+      message: "OTP sent to your email. Please verify to complete login.",
+      email: email, // Frontend ko email bhej rahe hain taakih woh OTP page mein use kar sake
+    };
+  }
+
+  // Step 2: Verify Login OTP and return tokens
+  async verifyLoginOtp(email: string, otp: string) {
+    const repository = new authRepository();
+
+    const verification = await repository.verifyAndDeleteOtp(
+      email,
+      otp,
+      "LOGIN",
+    );
+    if (!verification.isValid) {
+      throw new Error("Invalid or expired OTP");
+    }
+
+    const loginMetadata = verification.metadata;
+    if (!loginMetadata || !loginMetadata.userId) {
+      throw new Error("Login data not found or corrupted.");
+    }
+
+    // Generate tokens
+    const tokens = generateTokens({
+      id: loginMetadata.userId,
+      email: loginMetadata.email,
+      role_name: loginMetadata.role_name,
+    });
+
+    // Save refresh token
+    const sessionExpiresAt = new Date();
+    sessionExpiresAt.setDate(sessionExpiresAt.getDate() + 7);
+    await repository.saveRefreshToken(
+      loginMetadata.userId,
+      tokens.refreshToken,
+      sessionExpiresAt,
+    );
+
+    return {
+      user: {
+        id: loginMetadata.userId,
+        fullName: loginMetadata.full_name,
+        email: loginMetadata.email,
+        role: loginMetadata.role_name,
+      },
+      ...tokens,
+    };
+  }
+
+  // ==================== NEW: OAUTH OTP METHODS ====================
+
+  // NEW: Initiate OAuth OTP from Google Token
+  async initiateOAuthOtpFromGoogle(googleData: {
+    idToken: string;
+    accessToken?: string;
+    refreshToken?: string;
+    expiresIn?: number;
+  }) {
+    const repository = new authRepository();
+
+    // 1. Verify Google Token
+    const ticket = await googleClient.verifyIdToken({
+      idToken: googleData.idToken,
+      audience: process.env.GOOGLE_CLIENT_ID,
+    });
+
+    const payload = ticket.getPayload();
+
+    if (!payload || !payload.email || !payload.sub) {
+      throw new Error("Invalid Google Token: Missing essential payload data");
+    }
+
+    const { sub: googleId, email, name: full_name, picture } = payload;
+
+    if (!email) throw new Error("Email not found in Google account");
+
+    // 2. Initiate OTP (this handles both new and existing users)
+    return await this.initiateOAuthOtp(
+      googleId,
+      email,
+      full_name || "Google User",
+      picture,
+    );
+  }
+
+  // Step 1: After successful OAuth verification, generate OTP
+  async initiateOAuthOtp(
+    googleId: string,
+    email: string,
+    fullName: string,
+    picture?: string,
+  ) {
+    const repository = new authRepository();
+
+    // Check if user exists
+    let user = await repository.findUserByEmail(email);
+
+    if (user) {
+      // Existing user - update avatar if needed
+      if (!user.avatar_url && picture) {
+        user = await repository.updateUserAvatar(user.id, picture);
+      }
+    } else {
+      // New user - create account after OTP verification
+      // Don't create user yet, store data in OTP metadata
+    }
+
+    // Generate OTP
+    const otp = this.generateOTP();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+
+    // Store OAuth data in OTP metadata
+    const oauthMetadata = {
+      googleId,
+      email,
+      fullName,
+      picture: picture || null,
+      isNewUser: !user, // Flag to indicate if user needs to be created
+      existingUserId: user?.id || null,
+    };
+
+    await repository.saveOtp(email, otp, "OAUTH", expiresAt, oauthMetadata);
+
+    // Send OTP email
+    const { subject, text, html } = getRegistrationOtpTemplate(otp, "");
+    await sendEmail(email, subject, text, html);
+
+    return {
+      message: "OTP sent to your email. Please verify to complete OAuth login.",
+      email: email,
+    };
+  }
+
+  // Step 2: Verify OAuth OTP and complete account creation/login
+  async verifyOAuthOtp(email: string, otp: string) {
+    const repository = new authRepository();
+
+    const verification = await repository.verifyAndDeleteOtp(
+      email,
+      otp,
+      "OAUTH",
+    );
+    if (!verification.isValid) {
+      throw new Error("Invalid or expired OTP");
+    }
+
+    const oauthMetadata = verification.metadata;
+    if (!oauthMetadata) {
+      throw new Error("OAuth data not found or corrupted.");
+    }
+
+    let user;
+
+    if (oauthMetadata.isNewUser) {
+      // Create new user account
+      const randomPassword = crypto.randomBytes(16).toString("hex");
+      const salt = await bcrypt.genSalt(10);
+      const hashedPassword = await bcrypt.hash(randomPassword, salt);
+
+      const newUserData = {
+        fullName: oauthMetadata.fullName,
+        email: oauthMetadata.email,
+        password: hashedPassword,
+        avatar_url: oauthMetadata.picture,
+      };
+
+      user = await repository.registerUser(newUserData);
+    } else {
+      // Existing user
+      user = await repository.findUserById(oauthMetadata.existingUserId);
+      if (!user) {
+        throw new Error("User not found");
+      }
+    }
+
+    // Link provider account
+    const finalExpiresAt = null; // Google token expiry can be handled separately
+    await repository.linkProviderAccount({
+      user_id: user.id,
+      provider: "google",
+      provider_account_id: oauthMetadata.googleId,
+      access_token: null,
+      refresh_token: null,
+      expires_at: finalExpiresAt,
+    });
+
+    // Generate tokens
+    const tokens = generateTokens({
+      id: user.id,
+      email: user.email,
+      role_name: user.role_name,
+    });
+
+    // Save refresh token
+    const sessionExpiresAt = new Date();
+    sessionExpiresAt.setDate(sessionExpiresAt.getDate() + 7);
+    await repository.saveRefreshToken(
+      user.id,
+      tokens.refreshToken,
+      sessionExpiresAt,
+    );
+
+    // Send welcome email async
+    const userName = user.full_name || user.fullName || "User";
+    const { subject, text, html } = getWelcomeEmailTemplate(userName);
+    sendEmail(user.email, subject, text, html).catch(console.error);
+
+    const { password, ...userWithoutPassword } = user;
+
+    return {
+      user: userWithoutPassword,
+      ...tokens,
+    };
+  }
 }

@@ -15,43 +15,21 @@ class LeaderboardService {
     constructor() {
         this.repo = new leaderboard_repository_1.LeaderboardRepository();
     }
-    // 1. Saare players ki list ke liye
-    getLeaderboardData() {
-        return __awaiter(this, void 0, void 0, function* () {
-            const rows = yield this.repo.fetchRankings();
-            if (!rows || rows.length === 0) {
-                throw new Error("No leaderboard data found");
-            }
-            // convert repository rows into the API-friendly LeaderboardPlayer type
-            return rows.map((p) => ({
-                id: p.id,
-                full_name: p.full_name,
-                avatar_url: p.avatar_url,
-                total_points: p.total_points,
-                global_rank: p.global_rank,
-                tier: p.tier,
-                win_rate: p.win_rate,
-                current_streak: String(p.current_streak),
-            }));
+    getGlobalLeaderboard() {
+        return __awaiter(this, arguments, void 0, function* (page = 1) {
+            const limit = 50;
+            const offset = (page - 1) * limit;
+            return this.repo.fetchGlobalRankings(limit, offset);
         });
     }
-    // 2. 👈 Ye missing tha! Sirf Top N players ke liye (Dashboard widget)
-    getTop(limit) {
+    getTournamentLeaderboard(tournamentId) {
         return __awaiter(this, void 0, void 0, function* () {
-            const rows = yield this.repo.fetchRankings(limit);
-            if (!rows || rows.length === 0) {
-                throw new Error("No top players found");
-            }
-            return rows.map((p) => ({
-                id: p.id,
-                full_name: p.full_name,
-                avatar_url: p.avatar_url,
-                total_points: p.total_points,
-                global_rank: p.global_rank,
-                tier: p.tier,
-                win_rate: p.win_rate,
-                current_streak: String(p.current_streak),
-            }));
+            return this.repo.fetchTournamentLeaderboard(tournamentId);
+        });
+    }
+    recalculateRanks() {
+        return __awaiter(this, void 0, void 0, function* () {
+            return this.repo.recalculateRanks();
         });
     }
 }

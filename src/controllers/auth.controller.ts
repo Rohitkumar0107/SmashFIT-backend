@@ -37,21 +37,16 @@ export const register = async (req: AuthenticatedRequest, res: Response) => {
 export const login = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const service = new authService();
-    const result = await service.loginUser(req.body);
-
-    // [FIX] Save the refresh token in an HTTP-only cookie
-    res.cookie("refreshToken", result.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+    // Instead of directly logging in, initiate OTP flow
+    const result = await service.initiateLoginOtp(
+      req.body.email,
+      req.body.password,
+    );
 
     return res.status(200).json({
       success: true,
-      message: "Login successful",
-      user: result.user,
-      token: result.accessToken, // frontend compatibility
+      message: result.message,
+      email: result.email,
     });
   } catch (error: any) {
     return res.status(401).json({ success: false, message: error.message });
@@ -81,6 +76,70 @@ export const verifyRegistrationOtp = async (req: Request, res: Response) => {
     return res.status(200).json({
       success: true,
       message: "Registration completed successfully",
+      user: result.user,
+      token: result.accessToken,
+    });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// NEW: Verify Login OTP
+export const verifyLoginOtp = async (req: Request, res: Response) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Email and OTP are required" });
+    }
+
+    const service = new authService();
+    const result = await service.verifyLoginOtp(email, otp);
+
+    // Save the refresh token in an HTTP-only cookie
+    res.cookie("refreshToken", result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "Login successful",
+      user: result.user,
+      token: result.accessToken,
+    });
+  } catch (error: any) {
+    return res.status(400).json({ success: false, message: error.message });
+  }
+};
+
+// NEW: Verify OAuth OTP
+export const verifyOAuthOtp = async (req: Request, res: Response) => {
+  try {
+    const { email, otp } = req.body;
+    if (!email || !otp) {
+      return res
+        .status(400)
+        .json({ success: false, message: "Email and OTP are required" });
+    }
+
+    const service = new authService();
+    const result = await service.verifyOAuthOtp(email, otp);
+
+    // Save the refresh token in an HTTP-only cookie
+    res.cookie("refreshToken", result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
+    return res.status(200).json({
+      success: true,
+      message: "OAuth login verified successfully",
       user: result.user,
       token: result.accessToken,
     });
@@ -171,25 +230,18 @@ export const ssoCallback = async (req: AuthenticatedRequest, res: Response) => {
     }
 
     const service = new authService();
-    // Pura data service ko pass kar do
-    const result = await service.googleLogin({
+    // Instead of directly logging in, initiate OTP flow
+    const result = await service.initiateOAuthOtpFromGoogle({
       idToken,
       accessToken,
       refreshToken,
       expiresIn,
     });
 
-    // Refresh Token Cookie mein set karo
-    res.cookie("refreshToken", result.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-
     return res.status(200).json({
       success: true,
-      accessToken: result.accessToken,
+      message: result.message,
+      email: result.email,
     });
   } catch (error: any) {
     console.error("Google Auth Error:", error);
@@ -290,12 +342,10 @@ const forgotPassword = async (req: AuthenticatedRequest, res: Response) => {
     });
   } catch (error: any) {
     // Humesha 200 return karo security ke liye (Email enumeration bachane ke liye)
-    return res
-      .status(200)
-      .json({
-        success: true,
-        message: "If the email is registered, an OTP has been sent.",
-      });
+    return res.status(200).json({
+      success: true,
+      message: "If the email is registered, an OTP has been sent.",
+    });
   }
 };
 
@@ -328,12 +378,10 @@ const resetPassword = async (req: AuthenticatedRequest, res: Response) => {
     const service = new authService();
     await service.resetPassword(resetToken, req.body.new_password);
 
-    return res
-      .status(200)
-      .json({
-        success: true,
-        message: "Password reset successfully. You can now login.",
-      });
+    return res.status(200).json({
+      success: true,
+      message: "Password reset successfully. You can now login.",
+    });
   } catch (error: any) {
     return res.status(400).json({ success: false, message: error.message });
   }
@@ -346,12 +394,10 @@ const enableMfa = async (req: AuthenticatedRequest, res: Response) => {
     const email = req.user?.email;
 
     if (!userId || !email) {
-      return res
-        .status(401)
-        .json({
-          success: false,
-          message: "Unauthorized: User context missing",
-        });
+      return res.status(401).json({
+        success: false,
+        message: "Unauthorized: User context missing",
+      });
     }
 
     const service = new authService();
@@ -372,6 +418,8 @@ export default {
   register,
   login,
   verifyRegistrationOtp,
+  verifyLoginOtp,
+  verifyOAuthOtp,
   verifyEmail,
   logout,
   refreshToken,

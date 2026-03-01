@@ -1,15 +1,17 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
-exports.requireRole = exports.verifyAuth = void 0;
+exports.verifyAdmin = exports.requireRole = exports.verifyAuth = void 0;
 const jwt_utils_1 = require("../utils/jwt.utils");
 const verifyAuth = (req, res, next) => {
     try {
         // 1. Token nikalna (Header aam taur par "Bearer <token>" format mein hota hai)
         const authHeader = req.headers.authorization;
-        if (!authHeader || !authHeader.startsWith('Bearer ')) {
-            return res.status(401).json({ message: "Access Denied. No token provided." });
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+            return res
+                .status(401)
+                .json({ message: "Access Denied. No token provided." });
         }
-        const token = authHeader.split(' ')[1];
+        const token = authHeader.split(" ")[1];
         // 2. Token Verify karna (Jo utils humne pehle banaye the)
         // 'as any' ya apna custom interface lagao
         const decodedUser = (0, jwt_utils_1.verifyToken)(token);
@@ -30,15 +32,19 @@ const requireRole = (allowedRoles) => {
     return (req, res, next) => {
         // Middleware check: Kya user authenticated hai?
         if (!req.user) {
-            return res.status(401).json({ success: false, message: "Bhai, pehle login toh kar lo!" });
+            return res
+                .status(401)
+                .json({ success: false, message: "Bhai, pehle login toh kar lo!" });
         }
-        // Token se 'role' nikalna (Payload mein humne 'role' key use ki thi)
-        const userRole = req.user.role_name;
-        // Check karo ki user ka role allowed list mein hai ya nahi
-        if (!allowedRoles.includes(userRole)) {
+        // Token se 'role' nikalna (token ya DB dono se aa sakta hai)
+        const maybeRole = req.user.role || req.user.role_name;
+        const userRole = typeof maybeRole === "string" ? maybeRole.toUpperCase() : maybeRole;
+        // Check karo ki user ka role allowed list mein hai ya nahi (case-insensitive)
+        const allowedUpper = allowedRoles.map((r) => r.toUpperCase());
+        if (!allowedUpper.includes(userRole)) {
             return res.status(403).json({
                 success: false,
-                message: `Denied! Ye sirf ${allowedRoles.join(' or ')} ke liye hai.`
+                message: `Denied! Ye sirf ${allowedRoles.join(" or ")} ke liye hai.`,
             });
         }
         // Sab sahi hai, aage badho
@@ -46,3 +52,5 @@ const requireRole = (allowedRoles) => {
     };
 };
 exports.requireRole = requireRole;
+// 3. NAYA: verifyAdmin helper function
+exports.verifyAdmin = (0, exports.requireRole)(["Admin"]);
