@@ -27,6 +27,27 @@ if (
 }
 
 const buildTransportOptions = async () => {
+  // Ensure we have an IPv4-resolvable host to avoid IPv6 ENETUNREACH
+  let hostToUse = SMTP_HOST;
+  try {
+    // If Node supports setting default result order we've already set it above.
+    // If not, explicitly resolve an IPv4 address for the SMTP host and use it.
+    if (typeof (dns as any).setDefaultResultOrder !== "function") {
+      const lookup = await dns.promises.lookup(SMTP_HOST, { family: 4 });
+      if (lookup && lookup.address) {
+        hostToUse = lookup.address;
+        console.warn(
+          `⚠️ DNS fallback: using IPv4 address ${hostToUse} for ${SMTP_HOST}`,
+        );
+      }
+    }
+  } catch (err: any) {
+    console.warn(
+      "Could not resolve IPv4 address for SMTP host:",
+      err?.message || err,
+    );
+    hostToUse = SMTP_HOST;
+  }
   // If OAuth2 env vars are present, prefer OAuth2
   const clientId =
     process.env.GOOGLE_OAUTH_CLIENT_ID || process.env.GOOGLE_CLIENT_ID;
@@ -44,7 +65,7 @@ const buildTransportOptions = async () => {
       const { token } = await oAuth2Client.getAccessToken();
 
       return {
-        host: SMTP_HOST,
+        host: hostToUse,
         port: SMTP_PORT,
         secure: SMTP_PORT === 465,
         auth: {
@@ -74,7 +95,7 @@ const buildTransportOptions = async () => {
 
   // Fallback to simple user/pass auth (App Password)
   return {
-    host: SMTP_HOST,
+    host: hostToUse,
     port: SMTP_PORT,
     secure: SMTP_PORT === 465, // true for 465, false for other ports
     auth: {
