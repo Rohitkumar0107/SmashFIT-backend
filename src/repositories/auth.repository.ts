@@ -6,7 +6,7 @@ export class authRepository {
   // 1. Find User by Email (JOIN ke sath)
   async findUserByEmail(email: string) {
     const query = `
-            SELECT u.*, r.role_name 
+            SELECT u.*, r.name AS role_name 
             FROM sm.users u 
             LEFT JOIN sm.roles r ON u.role_id = r.id 
             WHERE u.email = $1
@@ -24,10 +24,8 @@ export class authRepository {
 
   // Register ke liye (Jo pehle banaya tha)
   async registerUser(userData: UserRequest) {
-    // First, get the default USER role
-    const roleQuery = `SELECT id FROM sm.roles WHERE role_name = 'USER' LIMIT 1`;
-    const roleResult = await pool.query(roleQuery);
-    const roleId = roleResult.rows[0]?.id;
+    // First, get the default USER role (with fallback in helper)
+    const roleId = await this.getDefaultRoleId();
 
     const query = `
             WITH inserted AS (
@@ -35,7 +33,7 @@ export class authRepository {
                 VALUES ($1, $2, $3, $4, $5) 
                 RETURNING *
             )
-            SELECT i.*, r.role_name 
+            SELECT i.*, r.name AS role_name 
             FROM inserted i
             LEFT JOIN sm.roles r ON i.role_id = r.id
         `;
@@ -117,29 +115,48 @@ export class authRepository {
 
   // Helper method to get default USER role ID
   async getDefaultRoleId() {
-    const query = `SELECT id FROM sm.roles WHERE role_name = 'USER' LIMIT 1`;
+    const query = `SELECT id FROM sm.roles WHERE name = 'USER' LIMIT 1`;
     const result = await pool.query(query);
-    return result.rows[0]?.id || null;
+    // if role not found, fall back to hardcoded value (id=2)
+    return result.rows[0]?.id || 2;
   }
-
 
   // auth.repository.ts (Add these methods inside authRepository class)
 
   // Save OTP to DB with optional metadata
-  async saveOtp(email: string, otp: string, type: string, expiresAt: Date, metadata?: any) {
+  async saveOtp(
+    email: string,
+    otp: string,
+    type: string,
+    expiresAt: Date,
+    metadata?: any,
+  ) {
     // Pehle purane OTP uda do same type ke, taaki spam na ho
-    await pool.query('DELETE FROM sm.otps WHERE email = $1 AND type = $2', [email, type]);
+    await pool.query("DELETE FROM sm.otps WHERE email = $1 AND type = $2", [
+      email,
+      type,
+    ]);
 
     const query = `
             INSERT INTO sm.otps (email, otp, type, expires_at, metadata) 
             VALUES ($1, $2, $3, $4, $5)
         `;
-    await pool.query(query, [email, otp, type, expiresAt, metadata ? JSON.stringify(metadata) : null]);
+    await pool.query(query, [
+      email,
+      otp,
+      type,
+      expiresAt,
+      metadata ? JSON.stringify(metadata) : null,
+    ]);
   }
 
   // Verify and Delete OTP (One-time use)
   // Verify and Delete OTP (One-time use) with Metadata Return
-  async verifyAndDeleteOtp(email: string, otp: string, type: string): Promise<{ isValid: boolean, metadata?: any }> {
+  async verifyAndDeleteOtp(
+    email: string,
+    otp: string,
+    type: string,
+  ): Promise<{ isValid: boolean; metadata?: any }> {
     const query = `
             SELECT * FROM sm.otps 
             WHERE email = $1 AND otp = $2 AND type = $3 AND expires_at > NOW()
@@ -149,7 +166,7 @@ export class authRepository {
     if (result.rows.length > 0) {
       // OTP sahi hai, ab isko delete kar do taaki dobara use na ho
       const row = result.rows[0];
-      await pool.query('DELETE FROM sm.otps WHERE id = $1', [row.id]);
+      await pool.query("DELETE FROM sm.otps WHERE id = $1", [row.id]);
       return { isValid: true, metadata: row.metadata };
     }
     return { isValid: false };
@@ -169,7 +186,8 @@ export class authRepository {
 
   // NEW: MFA Setup
   async updateMfaSecret(userId: string, secret: string, enabled: boolean) {
-    const query = "UPDATE sm.users SET mfa_secret = $1, mfa_enabled = $2 WHERE id = $3";
+    const query =
+      "UPDATE sm.users SET mfa_secret = $1, mfa_enabled = $2 WHERE id = $3";
     await pool.query(query, [secret, enabled, userId]);
   }
 }

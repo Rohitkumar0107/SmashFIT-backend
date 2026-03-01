@@ -189,8 +189,10 @@ export const refreshToken = async (
     const incomingToken = req.cookies?.refreshToken;
 
     if (!incomingToken) {
+      // no cookie means user hasn't completed login yet or has logged out
+      // return a non-error response so the frontend doesn't treat it as a hard failure
       return res
-        .status(401)
+        .status(200)
         .json({ success: false, message: "No refresh token provided" });
     }
 
