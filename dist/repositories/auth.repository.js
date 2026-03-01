@@ -20,7 +20,7 @@ class authRepository {
     findUserByEmail(email) {
         return __awaiter(this, void 0, void 0, function* () {
             const query = `
-            SELECT u.*, r.role_name 
+            SELECT u.*, r.name AS role_name 
             FROM sm.users u 
             LEFT JOIN sm.roles r ON u.role_id = r.id 
             WHERE u.email = $1
@@ -39,18 +39,15 @@ class authRepository {
     // Register ke liye (Jo pehle banaya tha)
     registerUser(userData) {
         return __awaiter(this, void 0, void 0, function* () {
-            var _a;
-            // First, get the default USER role
-            const roleQuery = `SELECT id FROM sm.roles WHERE role_name = 'USER' LIMIT 1`;
-            const roleResult = yield db_1.default.query(roleQuery);
-            const roleId = (_a = roleResult.rows[0]) === null || _a === void 0 ? void 0 : _a.id;
+            // First, get the default USER role (with fallback in helper)
+            const roleId = yield this.getDefaultRoleId();
             const query = `
             WITH inserted AS (
                 INSERT INTO sm.users (full_name, email, password, avatar_url, role_id) 
                 VALUES ($1, $2, $3, $4, $5) 
                 RETURNING *
             )
-            SELECT i.*, r.role_name 
+            SELECT i.*, r.name AS role_name 
             FROM inserted i
             LEFT JOIN sm.roles r ON i.role_id = r.id
         `;
@@ -137,9 +134,10 @@ class authRepository {
     getDefaultRoleId() {
         return __awaiter(this, void 0, void 0, function* () {
             var _a;
-            const query = `SELECT id FROM sm.roles WHERE role_name = 'USER' LIMIT 1`;
+            const query = `SELECT id FROM sm.roles WHERE name = 'USER' LIMIT 1`;
             const result = yield db_1.default.query(query);
-            return ((_a = result.rows[0]) === null || _a === void 0 ? void 0 : _a.id) || null;
+            // if role not found, fall back to hardcoded value (id=2)
+            return ((_a = result.rows[0]) === null || _a === void 0 ? void 0 : _a.id) || 2;
         });
     }
     // auth.repository.ts (Add these methods inside authRepository class)
@@ -147,12 +145,21 @@ class authRepository {
     saveOtp(email, otp, type, expiresAt, metadata) {
         return __awaiter(this, void 0, void 0, function* () {
             // Pehle purane OTP uda do same type ke, taaki spam na ho
-            yield db_1.default.query('DELETE FROM sm.otps WHERE email = $1 AND type = $2', [email, type]);
+            yield db_1.default.query("DELETE FROM sm.otps WHERE email = $1 AND type = $2", [
+                email,
+                type,
+            ]);
             const query = `
             INSERT INTO sm.otps (email, otp, type, expires_at, metadata) 
             VALUES ($1, $2, $3, $4, $5)
         `;
-            yield db_1.default.query(query, [email, otp, type, expiresAt, metadata ? JSON.stringify(metadata) : null]);
+            yield db_1.default.query(query, [
+                email,
+                otp,
+                type,
+                expiresAt,
+                metadata ? JSON.stringify(metadata) : null,
+            ]);
         });
     }
     // Verify and Delete OTP (One-time use)
@@ -167,7 +174,7 @@ class authRepository {
             if (result.rows.length > 0) {
                 // OTP sahi hai, ab isko delete kar do taaki dobara use na ho
                 const row = result.rows[0];
-                yield db_1.default.query('DELETE FROM sm.otps WHERE id = $1', [row.id]);
+                yield db_1.default.query("DELETE FROM sm.otps WHERE id = $1", [row.id]);
                 return { isValid: true, metadata: row.metadata };
             }
             return { isValid: false };

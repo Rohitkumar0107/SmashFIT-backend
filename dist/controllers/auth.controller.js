@@ -181,8 +181,10 @@ const refreshToken = (req, res) => __awaiter(void 0, void 0, void 0, function* (
         // 1. Cookie se token nikalo
         const incomingToken = (_a = req.cookies) === null || _a === void 0 ? void 0 : _a.refreshToken;
         if (!incomingToken) {
+            // no cookie means user hasn't completed login yet or has logged out
+            // return a non-error response so the frontend doesn't treat it as a hard failure
             return res
-                .status(401)
+                .status(200)
                 .json({ success: false, message: "No refresh token provided" });
         }
         // 2. Service call karo naye tokens ke liye

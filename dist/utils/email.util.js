@@ -16,7 +16,7 @@ Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendEmail = exports.verifyEmailConnection = void 0;
 const nodemailer_1 = __importDefault(require("nodemailer"));
 // googleapis is optional — require at runtime only when OAuth2 env is provided
-const SMTP_HOST = process.env.SMTP_HOST || "smtp.gmail.com";
+const SMTP_HOST = process.env.SMTP_HOST;
 const SMTP_PORT = Number(process.env.SMTP_PORT || "465");
 const SMTP_USER = process.env.SMTP_USER;
 const SMTP_PASS = (_a = process.env.SMTP_PASS) === null || _a === void 0 ? void 0 : _a.trim();
