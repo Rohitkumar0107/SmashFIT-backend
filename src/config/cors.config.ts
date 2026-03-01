@@ -13,7 +13,7 @@ const allowedOrigins = [
 export const corsConfig: CorsOptions = {
   origin: (origin, callback) => {
     // Log incoming origin for debugging
-    console.log("CORS check for origin:", origin);
+    // console.log("CORS check for origin:", origin);
     // Agar request server-to-server hai (origin undefined) ya allowed list mein hai, toh pass hone do
 
     if (!origin || allowedOrigins.includes(origin)) {

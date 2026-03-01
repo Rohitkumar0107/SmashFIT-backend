@@ -14,6 +14,11 @@ var __importDefault = (this && this.__importDefault) || function (mod) {
 var _a;
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.sendEmail = exports.verifyEmailConnection = void 0;
+const dns_1 = __importDefault(require("dns"));
+// Prefer IPv4 addresses first to avoid ENETUNREACH on hosts without IPv6
+if (typeof dns_1.default.setDefaultResultOrder === "function") {
+    dns_1.default.setDefaultResultOrder("ipv4first");
+}
 const nodemailer_1 = __importDefault(require("nodemailer"));
 // googleapis is optional — require at runtime only when OAuth2 env is provided
 const SMTP_HOST = process.env.SMTP_HOST || "smtp.gmail.com";
@@ -52,8 +57,9 @@ const buildTransportOptions = () => __awaiter(void 0, void 0, void 0, function* 
                     clientSecret,
                     refreshToken,
                 },
-                logger: true,
-                debug: true,
+                // Disable nodemailer's verbose protocol logging in production/local
+                logger: false,
+                debug: false,
                 // Add sensible timeouts to fail fast in environments where SMTP is blocked
                 connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
                 greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 5000),
@@ -73,8 +79,9 @@ const buildTransportOptions = () => __awaiter(void 0, void 0, void 0, function* 
             user: SMTP_USER,
             pass: SMTP_PASS,
         },
-        logger: true,
-        debug: true,
+        // Disable nodemailer's verbose protocol logging in production/local
+        logger: false,
+        debug: false,
         connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
         greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 5000),
         socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 10000),
@@ -94,7 +101,7 @@ const verifyEmailConnection = () => __awaiter(void 0, void 0, void 0, function* 
     try {
         const transporter = yield getTransporter();
         yield transporter.verify();
-        console.log("✅ SMTP ready");
+        // console.log("✅ SMTP ready");
     }
     catch (error) {
         console.error("❌ SMTP connection failed");

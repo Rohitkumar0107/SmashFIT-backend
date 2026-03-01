@@ -1,3 +1,9 @@
+import dns from "dns";
+// Prefer IPv4 addresses first to avoid ENETUNREACH on hosts without IPv6
+if (typeof (dns as any).setDefaultResultOrder === "function") {
+  (dns as any).setDefaultResultOrder("ipv4first");
+}
+
 import nodemailer from "nodemailer";
 // googleapis is optional — require at runtime only when OAuth2 env is provided
 
@@ -49,8 +55,9 @@ const buildTransportOptions = async () => {
           clientSecret,
           refreshToken,
         },
-        logger: true,
-        debug: true,
+        // Disable nodemailer's verbose protocol logging in production/local
+        logger: false,
+        debug: false,
         // Add sensible timeouts to fail fast in environments where SMTP is blocked
         connectionTimeout: Number(
           process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000,
@@ -74,8 +81,9 @@ const buildTransportOptions = async () => {
       user: SMTP_USER,
       pass: SMTP_PASS,
     },
-    logger: true,
-    debug: true,
+    // Disable nodemailer's verbose protocol logging in production/local
+    logger: false,
+    debug: false,
     connectionTimeout: Number(process.env.SMTP_CONNECTION_TIMEOUT_MS || 10000),
     greetingTimeout: Number(process.env.SMTP_GREETING_TIMEOUT_MS || 5000),
     socketTimeout: Number(process.env.SMTP_SOCKET_TIMEOUT_MS || 10000),
@@ -100,7 +108,7 @@ export const verifyEmailConnection = async () => {
   try {
     const transporter = await getTransporter();
     await transporter.verify();
-    console.log("✅ SMTP ready");
+    // console.log("✅ SMTP ready");
   } catch (error: any) {
     console.error("❌ SMTP connection failed");
     console.error(
