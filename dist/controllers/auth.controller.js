@@ -21,10 +21,17 @@ const register = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         }
         const service = new auth_service_1.authService();
         const result = yield service.registerUser(userData);
+        res.cookie("refreshToken", result.refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
         return res.status(200).json({
             success: true,
-            message: result.message,
-            email: result.email,
+            message: "Registration successful",
+            user: result.user,
+            token: result.accessToken,
         });
     }
     catch (error) {
@@ -43,12 +50,19 @@ exports.register = register;
 const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const service = new auth_service_1.authService();
-        // Use initiateLoginOtp instead of loginUser
-        const result = yield service.initiateLoginOtp(req.body.email, req.body.password);
+        // Use loginUser
+        const result = yield service.loginUser({ email: req.body.email, password: req.body.password });
+        res.cookie("refreshToken", result.refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
         return res.status(200).json({
             success: true,
-            message: result.message,
-            email: result.email,
+            message: "Login successful",
+            user: result.user,
+            token: result.accessToken,
         });
     }
     catch (error) {
@@ -229,17 +243,24 @@ const ssoCallback = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 .json({ success: false, message: "Google Token is required" });
         }
         const service = new auth_service_1.authService();
-        // Initiate OAuth OTP flow instead of direct login
-        const result = yield service.initiateOAuthOtpFromGoogle({
+        // Call googleLogin for direct authentication
+        const result = yield service.googleLogin({
             idToken,
             accessToken,
             refreshToken,
             expiresIn,
         });
+        res.cookie("refreshToken", result.refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60 * 1000,
+        });
         return res.status(200).json({
             success: true,
-            message: result.message,
-            email: result.email,
+            message: "Google login successful",
+            user: result.user,
+            token: result.accessToken,
         });
     }
     catch (error) {

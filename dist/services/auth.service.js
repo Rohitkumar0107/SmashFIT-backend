@@ -53,20 +53,25 @@ class authService {
             const salt = yield bcrypt_1.default.genSalt(10);
             const hashedPassword = yield bcrypt_1.default.hash(userData.password, salt);
             // 3. Save directly to Users table
-            const pendingUserData = {
+            const newUserData = {
                 fullName: userData.fullName,
                 email: userData.email,
                 password: hashedPassword,
             };
-            const otp = this.generateOTP();
-            const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
-            yield repository.saveOtp(userData.email, otp, "ACTIVATION", expiresAt, pendingUserData);
-            const { subject, text, html } = (0, email_templates_util_1.getRegistrationOtpTemplate)(otp, "");
-            (0, email_util_1.sendEmail)(userData.email, subject, text, html).catch((err) => console.error(`[Registration OTP] Email send failed for ${userData.email}:`, (err === null || err === void 0 ? void 0 : err.message) || err));
-            return {
-                message: "OTP sent to your email. Please verify to complete registration.",
-                email: userData.email,
-            };
+            const savedUser = yield repository.registerUser(newUserData);
+            const tokens = (0, jwt_utils_1.generateTokens)({
+                id: savedUser.id,
+                email: savedUser.email,
+                role_name: savedUser.role_name,
+            });
+            const sessionExpiresAt = new Date();
+            sessionExpiresAt.setDate(sessionExpiresAt.getDate() + 7);
+            yield repository.saveRefreshToken(savedUser.id, tokens.refreshToken, sessionExpiresAt);
+            const userName = savedUser.full_name || savedUser.fullName || "User";
+            const { subject, text, html } = (0, email_templates_util_1.getWelcomeEmailTemplate)(userName);
+            (0, email_util_1.sendEmail)(savedUser.email, subject, text, html).catch(console.error);
+            const { password: _pw } = savedUser, userWithoutPassword = __rest(savedUser, ["password"]);
+            return Object.assign({ user: userWithoutPassword }, tokens);
         });
     }
     // --- NEW: Verify OTP and Finalize Registration ---
