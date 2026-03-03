@@ -15,18 +15,10 @@ export const register = async (req: AuthenticatedRequest, res: Response) => {
     const service = new authService();
     const result = await service.registerUser(userData);
 
-    res.cookie("refreshToken", result.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-
-    return res.status(201).json({
+    return res.status(200).json({
       success: true,
-      message: "Registration successful",
-      user: result.user,
-      token: result.accessToken,
+      message: result.message,
+      email: result.email,
     });
   } catch (error: any) {
     // 4. Detailed Error Handling
@@ -47,25 +39,13 @@ export const login = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const service = new authService();
 
-    // Directly log in without OTP
-    const result = await service.loginUser({
-      email: req.body.email,
-      password: req.body.password,
-    });
-
-    // Save the refresh token in an HTTP-only cookie
-    res.cookie("refreshToken", result.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
+    // Use initiateLoginOtp instead of loginUser
+    const result = await service.initiateLoginOtp(req.body.email, req.body.password);
 
     return res.status(200).json({
       success: true,
-      message: "Login successful",
-      user: result.user,
-      token: result.accessToken,
+      message: result.message,
+      email: result.email,
     });
   } catch (error: any) {
     return res.status(401).json({ success: false, message: error.message });
@@ -259,26 +239,18 @@ export const ssoCallback = async (req: AuthenticatedRequest, res: Response) => {
     }
 
     const service = new authService();
-    // Directly log in via Google
-    const result = await service.googleLogin({
+    // Initiate OAuth OTP flow instead of direct login
+    const result = await service.initiateOAuthOtpFromGoogle({
       idToken,
       accessToken,
       refreshToken,
       expiresIn,
     });
 
-    res.cookie("refreshToken", result.refreshToken, {
-      httpOnly: true,
-      secure: process.env.NODE_ENV === "production",
-      sameSite: "strict",
-      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-    });
-
     return res.status(200).json({
       success: true,
-      message: "SSO login successful",
-      user: result.user,
-      token: result.accessToken,
+      message: result.message,
+      email: result.email,
     });
   } catch (error: any) {
     console.error("Google Auth Error:", error);

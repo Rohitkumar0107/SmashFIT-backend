@@ -21,17 +21,10 @@ const register = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         }
         const service = new auth_service_1.authService();
         const result = yield service.registerUser(userData);
-        res.cookie("refreshToken", result.refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "strict",
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        });
-        return res.status(201).json({
+        return res.status(200).json({
             success: true,
-            message: "Registration successful",
-            user: result.user,
-            token: result.accessToken,
+            message: result.message,
+            email: result.email,
         });
     }
     catch (error) {
@@ -50,23 +43,12 @@ exports.register = register;
 const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const service = new auth_service_1.authService();
-        // Directly log in without OTP
-        const result = yield service.loginUser({
-            email: req.body.email,
-            password: req.body.password,
-        });
-        // Save the refresh token in an HTTP-only cookie
-        res.cookie("refreshToken", result.refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "strict",
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        });
+        // Use initiateLoginOtp instead of loginUser
+        const result = yield service.initiateLoginOtp(req.body.email, req.body.password);
         return res.status(200).json({
             success: true,
-            message: "Login successful",
-            user: result.user,
-            token: result.accessToken,
+            message: result.message,
+            email: result.email,
         });
     }
     catch (error) {
@@ -231,7 +213,12 @@ const refreshToken = (req, res) => __awaiter(void 0, void 0, void 0, function* (
 exports.refreshToken = refreshToken;
 const ssoCallback = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     // debug log to see if POST ever hits
-    console.log("SSO callback hit from origin", req.headers.origin, "body:", req.body);
+    // console.log(
+    //   "SSO callback hit from origin",
+    //   req.headers.origin,
+    //   "body:",
+    //   req.body,
+    // );
     try {
         // Frontend body mein idToken bhejega
         const { idToken, accessToken, refreshToken, expiresIn } = req.body;
@@ -242,24 +229,17 @@ const ssoCallback = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 .json({ success: false, message: "Google Token is required" });
         }
         const service = new auth_service_1.authService();
-        // Directly log in via Google
-        const result = yield service.googleLogin({
+        // Initiate OAuth OTP flow instead of direct login
+        const result = yield service.initiateOAuthOtpFromGoogle({
             idToken,
             accessToken,
             refreshToken,
             expiresIn,
         });
-        res.cookie("refreshToken", result.refreshToken, {
-            httpOnly: true,
-            secure: process.env.NODE_ENV === "production",
-            sameSite: "strict",
-            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
-        });
         return res.status(200).json({
             success: true,
-            message: "SSO login successful",
-            user: result.user,
-            token: result.accessToken,
+            message: result.message,
+            email: result.email,
         });
     }
     catch (error) {

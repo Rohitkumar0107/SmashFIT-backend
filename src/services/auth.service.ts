@@ -26,7 +26,7 @@ export class authService {
     return Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
   }
 
-  async registerUser(userData: UserRequest): Promise<{ user: any; accessToken: string; refreshToken: string; }> {
+  async registerUser(userData: UserRequest): Promise<{ message: string; email: string; }> {
     const repository = new authRepository();
 
     // 1. Business Logic: Check if user already exists
@@ -48,34 +48,22 @@ export class authService {
       password: hashedPassword,
     };
 
-    const savedUser = await repository.registerUser(pendingUserData);
+    const otp = this.generateOTP();
+    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
 
-    // 4. Return tokens automatically login karne ke liye
-    const tokens = generateTokens({
-      id: savedUser.id,
-      email: savedUser.email,
-      role_name: savedUser.role_name,
-    });
+    await repository.saveOtp(userData.email, otp, "ACTIVATION", expiresAt, pendingUserData);
 
-    const sessionExpiresAt = new Date();
-    sessionExpiresAt.setDate(sessionExpiresAt.getDate() + 7);
-    await repository.saveRefreshToken(
-      savedUser.id,
-      tokens.refreshToken,
-      sessionExpiresAt,
+    const { subject, text, html } = getRegistrationOtpTemplate(otp, "");
+    sendEmail(userData.email, subject, text, html).catch((err) =>
+      console.error(
+        `[Registration OTP] Email send failed for ${userData.email}:`,
+        err?.message || err,
+      ),
     );
 
-    // 5. Send Welcome Email asynchronously
-    const userName = savedUser.full_name || savedUser.fullName || "User";
-    const { subject, text, html } = getWelcomeEmailTemplate(userName);
-    sendEmail(savedUser.email, subject, text, html).catch(console.error);
-
-    // Password hata do response se
-    const { password, ...userWithoutPassword } = savedUser;
-
     return {
-      user: userWithoutPassword,
-      ...tokens,
+      message: "OTP sent to your email. Please verify to complete registration.",
+      email: userData.email,
     };
   }
 
