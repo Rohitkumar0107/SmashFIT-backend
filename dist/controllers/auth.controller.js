@@ -21,9 +21,17 @@ const register = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
         }
         const service = new auth_service_1.authService();
         const result = yield service.registerUser(userData);
+        res.cookie("refreshToken", result.refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
         return res.status(201).json({
             success: true,
-            message: result.message, // "Account pending. OTP sent..."
+            message: "Registration successful",
+            user: result.user,
+            token: result.accessToken,
         });
     }
     catch (error) {
@@ -42,12 +50,23 @@ exports.register = register;
 const login = (req, res) => __awaiter(void 0, void 0, void 0, function* () {
     try {
         const service = new auth_service_1.authService();
-        // Instead of directly logging in, initiate OTP flow
-        const result = yield service.initiateLoginOtp(req.body.email, req.body.password);
+        // Directly log in without OTP
+        const result = yield service.loginUser({
+            email: req.body.email,
+            password: req.body.password,
+        });
+        // Save the refresh token in an HTTP-only cookie
+        res.cookie("refreshToken", result.refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
         return res.status(200).json({
             success: true,
-            message: result.message,
-            email: result.email,
+            message: "Login successful",
+            user: result.user,
+            token: result.accessToken,
         });
     }
     catch (error) {
@@ -223,17 +242,24 @@ const ssoCallback = (req, res) => __awaiter(void 0, void 0, void 0, function* ()
                 .json({ success: false, message: "Google Token is required" });
         }
         const service = new auth_service_1.authService();
-        // Instead of directly logging in, initiate OTP flow
-        const result = yield service.initiateOAuthOtpFromGoogle({
+        // Directly log in via Google
+        const result = yield service.googleLogin({
             idToken,
             accessToken,
             refreshToken,
             expiresIn,
         });
+        res.cookie("refreshToken", result.refreshToken, {
+            httpOnly: true,
+            secure: process.env.NODE_ENV === "production",
+            sameSite: "strict",
+            maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+        });
         return res.status(200).json({
             success: true,
-            message: result.message,
-            email: result.email,
+            message: "SSO login successful",
+            user: result.user,
+            token: result.accessToken,
         });
     }
     catch (error) {

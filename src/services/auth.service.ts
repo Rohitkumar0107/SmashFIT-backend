@@ -26,7 +26,7 @@ export class authService {
     return Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
   }
 
-  async registerUser(userData: UserRequest) {
+  async registerUser(userData: UserRequest): Promise<{ user: any; accessToken: string; refreshToken: string; }> {
     const repository = new authRepository();
 
     // 1. Business Logic: Check if user already exists
@@ -41,38 +41,41 @@ export class authService {
     const salt = await bcrypt.genSalt(10);
     const hashedPassword = await bcrypt.hash(userData.password, salt);
 
-    // 3. Save to Pending OTPs table instead of Users table
-    const otp = this.generateOTP();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes expiry
-
+    // 3. Save directly to Users table
     const pendingUserData = {
       fullName: userData.fullName,
       email: userData.email,
       password: hashedPassword,
     };
 
-    await repository.saveOtp(
-      userData.email,
-      otp,
-      "ACTIVATION",
-      expiresAt,
-      pendingUserData,
+    const savedUser = await repository.registerUser(pendingUserData);
+
+    // 4. Return tokens automatically login karne ke liye
+    const tokens = generateTokens({
+      id: savedUser.id,
+      email: savedUser.email,
+      role_name: savedUser.role_name,
+    });
+
+    const sessionExpiresAt = new Date();
+    sessionExpiresAt.setDate(sessionExpiresAt.getDate() + 7);
+    await repository.saveRefreshToken(
+      savedUser.id,
+      tokens.refreshToken,
+      sessionExpiresAt,
     );
 
-    // 4. Send Email (non-blocking so SMTP issues don't hang the endpoint)
-    // build a token the frontend or user can POST back to /api/auth/verify-email
-    const token = Buffer.from(`${userData.email}:${otp}`).toString("base64");
-    const { subject, text, html } = getRegistrationOtpTemplate(otp, token);
-    sendEmail(userData.email, subject, text, html).catch((err) =>
-      console.error(
-        `[Registration OTP] Email send failed for ${userData.email}:`,
-        err?.message || err,
-      ),
-    );
+    // 5. Send Welcome Email asynchronously
+    const userName = savedUser.full_name || savedUser.fullName || "User";
+    const { subject, text, html } = getWelcomeEmailTemplate(userName);
+    sendEmail(savedUser.email, subject, text, html).catch(console.error);
+
+    // Password hata do response se
+    const { password, ...userWithoutPassword } = savedUser;
 
     return {
-      message:
-        "Account pending. OTP sent to your email to verify registration.",
+      user: userWithoutPassword,
+      ...tokens,
     };
   }
 

@@ -15,9 +15,18 @@ export const register = async (req: AuthenticatedRequest, res: Response) => {
     const service = new authService();
     const result = await service.registerUser(userData);
 
+    res.cookie("refreshToken", result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
     return res.status(201).json({
       success: true,
-      message: result.message, // "Account pending. OTP sent..."
+      message: "Registration successful",
+      user: result.user,
+      token: result.accessToken,
     });
   } catch (error: any) {
     // 4. Detailed Error Handling
@@ -37,16 +46,26 @@ export const register = async (req: AuthenticatedRequest, res: Response) => {
 export const login = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const service = new authService();
-    // Instead of directly logging in, initiate OTP flow
-    const result = await service.initiateLoginOtp(
-      req.body.email,
-      req.body.password,
-    );
+
+    // Directly log in without OTP
+    const result = await service.loginUser({
+      email: req.body.email,
+      password: req.body.password,
+    });
+
+    // Save the refresh token in an HTTP-only cookie
+    res.cookie("refreshToken", result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
 
     return res.status(200).json({
       success: true,
-      message: result.message,
-      email: result.email,
+      message: "Login successful",
+      user: result.user,
+      token: result.accessToken,
     });
   } catch (error: any) {
     return res.status(401).json({ success: false, message: error.message });
@@ -222,12 +241,12 @@ export const refreshToken = async (
 
 export const ssoCallback = async (req: AuthenticatedRequest, res: Response) => {
   // debug log to see if POST ever hits
-  console.log(
-    "SSO callback hit from origin",
-    req.headers.origin,
-    "body:",
-    req.body,
-  );
+  // console.log(
+  //   "SSO callback hit from origin",
+  //   req.headers.origin,
+  //   "body:",
+  //   req.body,
+  // );
   try {
     // Frontend body mein idToken bhejega
     const { idToken, accessToken, refreshToken, expiresIn } = req.body;
@@ -240,18 +259,26 @@ export const ssoCallback = async (req: AuthenticatedRequest, res: Response) => {
     }
 
     const service = new authService();
-    // Instead of directly logging in, initiate OTP flow
-    const result = await service.initiateOAuthOtpFromGoogle({
+    // Directly log in via Google
+    const result = await service.googleLogin({
       idToken,
       accessToken,
       refreshToken,
       expiresIn,
     });
 
+    res.cookie("refreshToken", result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
     return res.status(200).json({
       success: true,
-      message: result.message,
-      email: result.email,
+      message: "SSO login successful",
+      user: result.user,
+      token: result.accessToken,
     });
   } catch (error: any) {
     console.error("Google Auth Error:", error);
