@@ -26,7 +26,7 @@ export class authService {
     return Math.floor(100000 + Math.random() * 900000).toString(); // 6-digit OTP
   }
 
-  async registerUser(userData: UserRequest): Promise<{ message: string; email: string; }> {
+  async registerUser(userData: UserRequest) {
     const repository = new authRepository();
 
     // 1. Business Logic: Check if user already exists
@@ -42,28 +42,37 @@ export class authService {
     const hashedPassword = await bcrypt.hash(userData.password, salt);
 
     // 3. Save directly to Users table
-    const pendingUserData = {
+    const newUserData = {
       fullName: userData.fullName,
       email: userData.email,
       password: hashedPassword,
     };
 
-    const otp = this.generateOTP();
-    const expiresAt = new Date(Date.now() + 10 * 60 * 1000); // 10 minutes
+    const savedUser = await repository.registerUser(newUserData);
 
-    await repository.saveOtp(userData.email, otp, "ACTIVATION", expiresAt, pendingUserData);
+    const tokens = generateTokens({
+      id: savedUser.id,
+      email: savedUser.email,
+      role_name: savedUser.role_name,
+    });
 
-    const { subject, text, html } = getRegistrationOtpTemplate(otp, "");
-    sendEmail(userData.email, subject, text, html).catch((err) =>
-      console.error(
-        `[Registration OTP] Email send failed for ${userData.email}:`,
-        err?.message || err,
-      ),
+    const sessionExpiresAt = new Date();
+    sessionExpiresAt.setDate(sessionExpiresAt.getDate() + 7);
+    await repository.saveRefreshToken(
+      savedUser.id,
+      tokens.refreshToken,
+      sessionExpiresAt,
     );
 
+    const userName = savedUser.full_name || savedUser.fullName || "User";
+    const { subject, text, html } = getWelcomeEmailTemplate(userName);
+    sendEmail(savedUser.email, subject, text, html).catch(console.error);
+
+    const { password: _pw, ...userWithoutPassword } = savedUser;
+
     return {
-      message: "OTP sent to your email. Please verify to complete registration.",
-      email: userData.email,
+      user: userWithoutPassword,
+      ...tokens,
     };
   }
 

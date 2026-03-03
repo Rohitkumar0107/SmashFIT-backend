@@ -15,10 +15,18 @@ export const register = async (req: AuthenticatedRequest, res: Response) => {
     const service = new authService();
     const result = await service.registerUser(userData);
 
+    res.cookie("refreshToken", result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000, // 7 days
+    });
+
     return res.status(200).json({
       success: true,
-      message: result.message,
-      email: result.email,
+      message: "Registration successful",
+      user: result.user,
+      token: result.accessToken,
     });
   } catch (error: any) {
     // 4. Detailed Error Handling
@@ -39,13 +47,21 @@ export const login = async (req: AuthenticatedRequest, res: Response) => {
   try {
     const service = new authService();
 
-    // Use initiateLoginOtp instead of loginUser
-    const result = await service.initiateLoginOtp(req.body.email, req.body.password);
+    // Use loginUser
+    const result = await service.loginUser({ email: req.body.email, password: req.body.password });
+
+    res.cookie("refreshToken", result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
 
     return res.status(200).json({
       success: true,
-      message: result.message,
-      email: result.email,
+      message: "Login successful",
+      user: result.user,
+      token: result.accessToken,
     });
   } catch (error: any) {
     return res.status(401).json({ success: false, message: error.message });
@@ -239,18 +255,26 @@ export const ssoCallback = async (req: AuthenticatedRequest, res: Response) => {
     }
 
     const service = new authService();
-    // Initiate OAuth OTP flow instead of direct login
-    const result = await service.initiateOAuthOtpFromGoogle({
+    // Call googleLogin for direct authentication
+    const result = await service.googleLogin({
       idToken,
       accessToken,
       refreshToken,
       expiresIn,
     });
 
+    res.cookie("refreshToken", result.refreshToken, {
+      httpOnly: true,
+      secure: process.env.NODE_ENV === "production",
+      sameSite: "strict",
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+
     return res.status(200).json({
       success: true,
-      message: result.message,
-      email: result.email,
+      message: "Google login successful",
+      user: result.user,
+      token: result.accessToken,
     });
   } catch (error: any) {
     console.error("Google Auth Error:", error);
